@@ -103,7 +103,8 @@ if [ "$INSTALL_METHOD" = "1" ]; then
     if [[ "$RUN_TEST" =~ ^[Yy]$ ]]; then
         echo ""
         echo -e "${GREEN}>>> Testing Ollama...${NC}"
-        echo -e "${YELLOW}Open another terminal and run: docker exec ollama rocm-smi --showuse --showmemuse${NC}"
+        echo -e "${YELLOW}Open another terminal (SSH to this LXC) and run:${NC}"
+        echo -e "${CYAN}  watch -n 0.5 rocm-smi --showuse --showmemuse${NC}"
         echo ""
         sleep 2
         
@@ -119,8 +120,9 @@ if [ "$INSTALL_METHOD" = "1" ]; then
     echo -e "${YELLOW}To use Ollama:${NC}"
     echo "  docker exec -it ollama ollama run llama3.2:3b"
     echo ""
-    echo -e "${YELLOW}Monitor GPU:${NC}"
-    echo "  docker exec ollama rocm-smi --showuse --showmemuse"
+    echo -e "${YELLOW}Monitor GPU (run from LXC shell, not inside container):${NC}"
+    echo "  watch -n 0.5 rocm-smi --showuse --showmemuse"
+    echo "  # Or for one-time check: rocm-smi --showproductname --showuse"
     echo ""
     echo -e "${YELLOW}Access Ollama API:${NC}"
     echo "  curl http://localhost:11434/api/generate -d '{\"model\":\"llama3.2:3b\",\"prompt\":\"Hello\"}'"

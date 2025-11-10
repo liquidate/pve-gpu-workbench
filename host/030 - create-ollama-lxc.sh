@@ -181,13 +181,31 @@ while true; do
     break
 done
 
+# Confirm gateway
+echo ""
+while true; do
+    read -r -p "Gateway address [$GATEWAY]: " GATEWAY_INPUT
+    GATEWAY_INPUT=${GATEWAY_INPUT:-$GATEWAY}
+    
+    # Validate gateway format
+    if [[ ! "$GATEWAY_INPUT" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo -e "${RED}Invalid gateway format. Please use format: xxx.xxx.xxx.xxx${NC}"
+        continue
+    fi
+    
+    GATEWAY="$GATEWAY_INPUT"
+    break
+done
+
 # Detect available storage
 echo ""
 echo -e "${GREEN}>>> Detecting available storage...${NC}"
 echo ""
 echo -e "${CYAN}Available storage pools:${NC}"
 
-declare -A STORAGE_POOLS
+declare -a STORAGE_NAMES
+declare -A STORAGE_INFO
+INDEX=1
 while IFS= read -r line; do
     name=$(echo "$line" | awk '{print $1}')
     type=$(echo "$line" | awk '{print $2}')
@@ -195,30 +213,37 @@ while IFS= read -r line; do
     
     # Only show container-compatible storage
     if [[ "$type" =~ ^(dir|zfspool|lvm|lvmthin|btrfs)$ ]]; then
-        STORAGE_POOLS[$name]=$avail
-        printf "  %-20s %10s available\n" "$name" "$avail"
+        STORAGE_NAMES[$INDEX]=$name
+        STORAGE_INFO[$name]=$avail
+        printf "  [%d] %-20s %10s available\n" "$INDEX" "$name" "$avail"
+        ((INDEX++))
     fi
 done < <(pvesm status | tail -n +2)
 
-if [ ${#STORAGE_POOLS[@]} -eq 0 ]; then
+if [ ${#STORAGE_NAMES[@]} -eq 0 ]; then
     echo -e "${RED}No suitable storage found${NC}"
     exit 1
 fi
 
 # Default to local-zfs or first available
-DEFAULT_STORAGE="local-zfs"
-if [ -z "${STORAGE_POOLS[$DEFAULT_STORAGE]}" ]; then
-    DEFAULT_STORAGE=$(echo "${!STORAGE_POOLS[@]}" | tr ' ' '\n' | head -n1)
-fi
+DEFAULT_STORAGE_NUM=1
+for i in "${!STORAGE_NAMES[@]}"; do
+    if [ "${STORAGE_NAMES[$i]}" = "local-zfs" ]; then
+        DEFAULT_STORAGE_NUM=$i
+        break
+    fi
+done
 
 echo ""
-read -r -p "Select storage pool [$DEFAULT_STORAGE]: " STORAGE
-STORAGE=${STORAGE:-$DEFAULT_STORAGE}
+read -r -p "Select storage pool [${DEFAULT_STORAGE_NUM}]: " STORAGE_CHOICE
+STORAGE_CHOICE=${STORAGE_CHOICE:-$DEFAULT_STORAGE_NUM}
 
-if [ -z "${STORAGE_POOLS[$STORAGE]}" ]; then
-    echo -e "${RED}Invalid storage pool${NC}"
+if [ -z "${STORAGE_NAMES[$STORAGE_CHOICE]}" ]; then
+    echo -e "${RED}Invalid storage selection${NC}"
     exit 1
 fi
+
+STORAGE="${STORAGE_NAMES[$STORAGE_CHOICE]}"
 
 # Resource allocation
 echo ""

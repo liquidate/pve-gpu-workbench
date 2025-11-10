@@ -296,7 +296,7 @@ detect_gpus() {
 show_main_menu() {
     clear
     echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  Proxmox Setup - Guided Installer   ║${NC}"
+    echo -e "${GREEN}║  Proxmox Setup - Guided Installer    ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     

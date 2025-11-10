@@ -33,88 +33,15 @@ fi
 # Check installation method
 echo ""
 echo -e "${YELLOW}Choose installation method:${NC}"
-echo "  1) Native Ollama (recommended for simplicity)"
-echo "  2) Docker Ollama (recommended for isolation)"
+echo "  1) Docker Ollama (recommended - managed via Portainer)"
+echo "  2) Native Ollama (alternative - runs as systemd service)"
+echo ""
+echo -e "${CYAN}Note: Both work equally well with GPU. Docker is easier to manage.${NC}"
 echo ""
 read -r -p "Enter choice [1]: " INSTALL_METHOD
 INSTALL_METHOD=${INSTALL_METHOD:-1}
 
 if [ "$INSTALL_METHOD" = "1" ]; then
-    echo ""
-    echo -e "${GREEN}>>> Installing Ollama natively...${NC}"
-    
-    # Check if already installed
-    if command -v ollama >/dev/null 2>&1; then
-        echo -e "${YELLOW}Ollama is already installed${NC}"
-        ollama --version
-    else
-        curl -fsSL https://ollama.com/install.sh | sh
-        echo -e "${GREEN}✓ Ollama installed${NC}"
-    fi
-    
-    # Start Ollama service
-    echo ""
-    echo -e "${GREEN}>>> Starting Ollama service...${NC}"
-    systemctl enable ollama 2>/dev/null || true
-    systemctl start ollama 2>/dev/null || true
-    sleep 2
-    
-    # Test with a model
-    echo ""
-    echo -e "${YELLOW}=== Test Ollama with GPU ===${NC}"
-    echo ""
-    echo -e "${GREEN}Available test models:${NC}"
-    echo "  1) llama3.2:3b     - Fastest, 3B parameters (~2GB)"
-    echo "  2) llama3.2:1b     - Smallest, 1B parameters (~1GB)"
-    echo "  3) qwen2.5:3b      - Alternative 3B model"
-    echo "  4) Skip test"
-    echo ""
-    read -r -p "Enter choice [1]: " MODEL_CHOICE
-    MODEL_CHOICE=${MODEL_CHOICE:-1}
-    
-    case $MODEL_CHOICE in
-        1) MODEL="llama3.2:3b" ;;
-        2) MODEL="llama3.2:1b" ;;
-        3) MODEL="qwen2.5:3b" ;;
-        4) 
-            echo ""
-            echo -e "${GREEN}✓ Ollama installed successfully${NC}"
-            echo ""
-            echo -e "${YELLOW}To use Ollama:${NC}"
-            echo "  ollama run llama3.2:3b"
-            echo ""
-            echo -e "${YELLOW}Monitor GPU usage:${NC}"
-            echo "  watch -n 0.5 rocm-smi --showuse --showmemuse"
-            exit 0
-            ;;
-        *) MODEL="llama3.2:3b" ;;
-    esac
-    
-    echo ""
-    echo -e "${GREEN}>>> Downloading and running $MODEL...${NC}"
-    echo -e "${YELLOW}This will download the model (~2GB) and test it.${NC}"
-    echo -e "${YELLOW}Open another terminal and run: watch -n 0.5 rocm-smi --showuse --showmemuse${NC}"
-    echo ""
-    sleep 2
-    
-    # Run test
-    echo "Testing with prompt: 'Why is the sky blue? Answer in one sentence.'"
-    echo ""
-    echo "quit" | ollama run $MODEL "Why is the sky blue? Answer in one sentence."
-    
-    echo ""
-    echo -e "${GREEN}✓ Ollama test complete!${NC}"
-    echo ""
-    echo -e "${YELLOW}To continue chatting:${NC}"
-    echo "  ollama run $MODEL"
-    echo ""
-    echo -e "${YELLOW}To try other models:${NC}"
-    echo "  ollama list                    # List downloaded models"
-    echo "  ollama pull <model>            # Download a model"
-    echo "  ollama rm <model>              # Remove a model"
-    echo ""
-
-elif [ "$INSTALL_METHOD" = "2" ]; then
     echo ""
     echo -e "${GREEN}>>> Installing Ollama in Docker...${NC}"
     
@@ -192,6 +119,81 @@ elif [ "$INSTALL_METHOD" = "2" ]; then
     echo "  docker stop ollama"
     echo "  docker start ollama"
     echo "  docker logs -f ollama"
+    echo ""
+
+elif [ "$INSTALL_METHOD" = "2" ]; then
+    echo ""
+    echo -e "${GREEN}>>> Installing Ollama natively...${NC}"
+    
+    # Check if already installed
+    if command -v ollama >/dev/null 2>&1; then
+        echo -e "${YELLOW}Ollama is already installed${NC}"
+        ollama --version
+    else
+        curl -fsSL https://ollama.com/install.sh | sh
+        echo -e "${GREEN}✓ Ollama installed${NC}"
+    fi
+    
+    # Start Ollama service
+    echo ""
+    echo -e "${GREEN}>>> Starting Ollama service...${NC}"
+    systemctl enable ollama 2>/dev/null || true
+    systemctl start ollama 2>/dev/null || true
+    sleep 2
+    
+    # Test with a model
+    echo ""
+    echo -e "${YELLOW}=== Test Ollama with GPU ===${NC}"
+    echo ""
+    echo -e "${GREEN}Available test models:${NC}"
+    echo "  1) llama3.2:3b     - Fastest, 3B parameters (~2GB)"
+    echo "  2) llama3.2:1b     - Smallest, 1B parameters (~1GB)"
+    echo "  3) qwen2.5:3b      - Alternative 3B model"
+    echo "  4) Skip test"
+    echo ""
+    read -r -p "Enter choice [1]: " MODEL_CHOICE
+    MODEL_CHOICE=${MODEL_CHOICE:-1}
+    
+    case $MODEL_CHOICE in
+        1) MODEL="llama3.2:3b" ;;
+        2) MODEL="llama3.2:1b" ;;
+        3) MODEL="qwen2.5:3b" ;;
+        4) 
+            echo ""
+            echo -e "${GREEN}✓ Ollama installed successfully${NC}"
+            echo ""
+            echo -e "${YELLOW}To use Ollama:${NC}"
+            echo "  ollama run llama3.2:3b"
+            echo ""
+            echo -e "${YELLOW}Monitor GPU usage:${NC}"
+            echo "  watch -n 0.5 rocm-smi --showuse --showmemuse"
+            exit 0
+            ;;
+        *) MODEL="llama3.2:3b" ;;
+    esac
+    
+    echo ""
+    echo -e "${GREEN}>>> Downloading and running $MODEL...${NC}"
+    echo -e "${YELLOW}This will download the model (~2GB) and test it.${NC}"
+    echo -e "${YELLOW}Open another terminal and run: watch -n 0.5 rocm-smi --showuse --showmemuse${NC}"
+    echo ""
+    sleep 2
+    
+    # Run test
+    echo "Testing with prompt: 'Why is the sky blue? Answer in one sentence.'"
+    echo ""
+    echo "quit" | ollama run $MODEL "Why is the sky blue? Answer in one sentence."
+    
+    echo ""
+    echo -e "${GREEN}✓ Ollama test complete!${NC}"
+    echo ""
+    echo -e "${YELLOW}To continue chatting:${NC}"
+    echo "  ollama run $MODEL"
+    echo ""
+    echo -e "${YELLOW}To try other models:${NC}"
+    echo "  ollama list                    # List downloaded models"
+    echo "  ollama pull <model>            # Download a model"
+    echo "  ollama rm <model>              # Remove a model"
     echo ""
     
 else

@@ -427,7 +427,13 @@ fi
 
 echo -e "${GREEN}>>> Setting root password...${NC}"
 pct exec $CONTAINER_ID -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
-echo -e "${GREEN}✓ Password set${NC}"
+
+# Enable password authentication for SSH
+pct exec $CONTAINER_ID -- sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+pct exec $CONTAINER_ID -- sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+pct exec $CONTAINER_ID -- systemctl restart ssh
+
+echo -e "${GREEN}✓ Password set and SSH configured${NC}"
 
 # Verify GPU passthrough inside container
 echo ""
@@ -453,7 +459,7 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 echo -e "${GREEN}>>> Updating system packages...${NC}"
-pct exec $CONTAINER_ID -- apt update -qq
+pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1
 pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1
 echo -e "${GREEN}✓ System packages updated${NC}"
 

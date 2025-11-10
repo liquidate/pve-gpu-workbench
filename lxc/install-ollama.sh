@@ -30,10 +30,20 @@ else
     exit 1
 fi
 
+# Check if Portainer is installed
+PORTAINER_INSTALLED=false
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^portainer$'; then
+    PORTAINER_INSTALLED=true
+fi
+
 # Check installation method
 echo ""
 echo -e "${YELLOW}Choose installation method:${NC}"
-echo "  1) Docker Ollama (recommended - managed via Portainer)"
+if [ "$PORTAINER_INSTALLED" = true ]; then
+    echo "  1) Docker Ollama (recommended - visible in Portainer UI)"
+else
+    echo "  1) Docker Ollama (recommended - managed with docker commands)"
+fi
 echo "  2) Native Ollama (alternative - runs as systemd service)"
 echo ""
 echo -e "${CYAN}Note: Both work equally well with GPU. Docker is easier to manage.${NC}"

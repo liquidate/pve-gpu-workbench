@@ -155,9 +155,24 @@ run_script() {
     script_num=$(basename "$script_path" | grep -oP '^\d+')
     script_name=$(basename "$script_path")
     
+    # Determine location context
+    local location_tag=""
+    local location_desc=""
+    if [ "$script_num" -ge 0 ] && [ "$script_num" -le 29 ]; then
+        location_tag="${GREEN}[HOST]${NC}"
+        location_desc="${CYAN}Location: Proxmox host system (PVE)${NC}"
+    elif [ "$script_num" -ge 30 ] && [ "$script_num" -le 99 ]; then
+        location_tag="${CYAN}[LXC]${NC}"
+        location_desc="${CYAN}Location: Inside LXC container${NC}"
+    else
+        location_tag="${YELLOW}[SYSTEM]${NC}"
+        location_desc="${CYAN}Location: Proxmox host system${NC}"
+    fi
+    
     echo ""
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}Running: $script_name${NC}"
+    echo -e "${GREEN}Running: ${NC}$location_tag ${GREEN}$script_name${NC}"
+    echo -e "$location_desc"
     echo -e "${GREEN}========================================${NC}"
     echo ""
     

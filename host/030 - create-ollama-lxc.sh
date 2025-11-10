@@ -428,8 +428,12 @@ echo -e "${GREEN}Installing Ollama${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-echo -e "${GREEN}>>> Installing dependencies (curl)...${NC}"
+echo -e "${GREEN}>>> Updating system packages...${NC}"
 pct exec $CONTAINER_ID -- apt update -qq
+pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1
+echo -e "${GREEN}✓ System packages updated${NC}"
+
+echo -e "${GREEN}>>> Installing dependencies (curl)...${NC}"
 pct exec $CONTAINER_ID -- apt install -y curl >/dev/null 2>&1
 
 echo -e "${GREEN}>>> Installing Ollama...${NC}"

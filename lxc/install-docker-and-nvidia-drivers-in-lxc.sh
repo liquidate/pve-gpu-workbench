@@ -269,15 +269,15 @@ sleep 2
 echo -e "${GREEN}>>> Docker and NVIDIA Container Toolkit configuration complete${NC}"
 echo ""
 
-# Install monitoring tools
+# Install monitoring and utility tools
 if [ "$VERBOSE" = "1" ]; then
-    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y nvtop btop htop
-    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+    echo -e "${GREEN}>>> Installing monitoring and utility tools...${NC}"
+    apt install -y nvtop btop htop nano vim curl wget git
+    echo -e "${GREEN}✓ Monitoring and utility tools installed${NC}"
 else
-    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y $QUIET_APT nvtop btop htop >/dev/null 2>&1
-    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+    echo -e "${GREEN}>>> Installing monitoring and utility tools...${NC}"
+    apt install -y $QUIET_APT nvtop btop htop nano vim curl wget git >/dev/null 2>&1
+    echo -e "${GREEN}✓ Monitoring and utility tools installed${NC}"
 fi
 echo ""
 

@@ -250,15 +250,15 @@ else
     echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 fi
 
-# Install monitoring tools
+# Install monitoring and utility tools
 if [ "$VERBOSE" = "1" ]; then
-    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y nvtop radeontop btop htop
-    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+    echo -e "${GREEN}>>> Installing monitoring and utility tools...${NC}"
+    apt install -y nvtop radeontop btop htop nano vim curl wget git
+    echo -e "${GREEN}✓ Monitoring and utility tools installed${NC}"
 else
-    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y $QUIET_APT nvtop radeontop btop htop >/dev/null 2>&1
-    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+    echo -e "${GREEN}>>> Installing monitoring and utility tools...${NC}"
+    apt install -y $QUIET_APT nvtop radeontop btop htop nano vim curl wget git >/dev/null 2>&1
+    echo -e "${GREEN}✓ Monitoring and utility tools installed${NC}"
 fi
 
 # Add root user to render and video groups (critical for GPU access)
@@ -300,11 +300,11 @@ echo -e "${GREEN}==========================================${NC}"
 echo ""
 
 # Check if tools are installed
-if ! which rocm-smi rocminfo nvtop radeontop btop htop >/dev/null 2>&1; then
+if ! which rocm-smi rocminfo nvtop radeontop btop htop nano vim >/dev/null 2>&1; then
     echo -e "${RED}ERROR: Required tools not found in PATH${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ ROCm and monitoring tools installed${NC}"
+echo -e "${GREEN}✓ ROCm, monitoring, and utility tools installed${NC}"
 
 # Verify devices are accessible
 if [ ! -e /dev/kfd ]; then

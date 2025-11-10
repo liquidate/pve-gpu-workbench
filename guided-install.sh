@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 
 # Guided installation script for Proxmox GPU setup
@@ -303,9 +304,48 @@ while true; do
             echo -e "${YELLOW}Press 'y' to run, 'n' to skip, or 'q' to return to main menu.${NC}"
             echo ""
             
+            # Load GPU detection functions
+            # shellcheck source=includes/gpu-detect.sh
+            source "${SCRIPT_DIR}/includes/gpu-detect.sh"
+            
+            # Detect available GPUs once
+            HAS_AMD_GPU=false
+            HAS_NVIDIA_GPU=false
+            if detect_amd_gpus; then
+                HAS_AMD_GPU=true
+            fi
+            if detect_nvidia_gpus; then
+                HAS_NVIDIA_GPU=true
+            fi
+            
             quit_requested=false
             while IFS= read -r script; do
                 script_num=$(basename "$script" | grep -oP '^\d+')
+                script_name=$(basename "$script")
+                
+                # Auto-skip GPU-specific scripts if hardware not present
+                SKIP_SCRIPT=false
+                case "$script_num" in
+                    003|005)
+                        # AMD-specific scripts
+                        if [ "$HAS_AMD_GPU" = false ]; then
+                            echo -e "${YELLOW}⊘ Skipping $script_name - No AMD GPU detected${NC}"
+                            SKIP_SCRIPT=true
+                        fi
+                        ;;
+                    004|006)
+                        # NVIDIA-specific scripts
+                        if [ "$HAS_NVIDIA_GPU" = false ]; then
+                            echo -e "${YELLOW}⊘ Skipping $script_name - No NVIDIA GPU detected${NC}"
+                            SKIP_SCRIPT=true
+                        fi
+                        ;;
+                esac
+                
+                if [ "$SKIP_SCRIPT" = true ]; then
+                    sleep 0.3
+                    continue
+                fi
                 
                 # Always ask user with detailed information (never auto-skip in "all" mode)
                 confirm_run_with_info "$script"

@@ -2,6 +2,33 @@
 # SCRIPT_DESC: Install AMD ROCm 7.1.X drivers
 # SCRIPT_DETECT: lsmod | grep -q amdgpu
 
+# Get script directory and source utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../includes/colors.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
+
+# Check if AMD GPU is present
+if ! detect_amd_gpus; then
+    echo -e "${YELLOW}========================================${NC}"
+    echo -e "${YELLOW}No AMD GPUs detected on this system${NC}"
+    echo -e "${YELLOW}========================================${NC}"
+    echo ""
+    echo -e "${YELLOW}This script installs AMD GPU drivers, but no AMD GPUs were found.${NC}"
+    echo ""
+    echo -e "${YELLOW}Available GPUs:${NC}"
+    lspci -nn | grep -i "VGA\|3D\|Display"
+    echo ""
+    read -r -p "Continue anyway? [y/N]: " CONTINUE
+    CONTINUE=${CONTINUE:-N}
+    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+        echo "Skipped."
+        exit 0
+    fi
+fi
+
+echo -e "${GREEN}>>> Installing AMD ROCm drivers${NC}"
 echo ">>> Adding AMD ROCm 7.1.X repository"
 mkdir --parents /etc/apt/keyrings
 chmod 0755 /etc/apt/keyrings

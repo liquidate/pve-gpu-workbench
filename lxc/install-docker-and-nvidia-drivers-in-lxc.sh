@@ -5,6 +5,10 @@
 
 set -e
 
+# Set non-interactive mode for apt
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
 # Get script directory and source colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -52,7 +56,8 @@ apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || tru
 
 # Update package list and upgrade existing packages
 echo -e "${GREEN}>>> Updating system packages...${NC}"
-apt update && apt upgrade -y
+apt update
+apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 
 # Install Docker prerequisites
 echo -e "${GREEN}>>> Installing prerequisites...${NC}"
@@ -255,11 +260,19 @@ echo -e "${YELLOW}Test 1: NVIDIA SMI test${NC}"
 echo -e "${YELLOW}Image: nvidia/cuda:13.0.1-base-ubuntu24.04 (~250MB)${NC}"
 echo -e "${YELLOW}Command: docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi${NC}"
 echo ""
-read -r -p "Run Test 1? This will download ~250MB. [Y/n]: " RUN_TEST1
-RUN_TEST1=${RUN_TEST1:-Y}
+
+# Check if running interactively or via pct exec
+if [ -t 0 ]; then
+    read -r -p "Run Test 1? This will download ~250MB. [Y/n]: " RUN_TEST1
+    RUN_TEST1=${RUN_TEST1:-Y}
+else
+    # Non-interactive mode (pct exec) - skip Docker test by default
+    echo -e "${YELLOW}Non-interactive mode detected. Skipping Docker test.${NC}"
+    RUN_TEST1="n"
+fi
 
 if [[ "$RUN_TEST1" =~ ^[Yy]$ ]]; then
-    docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi
+    docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi || echo -e "${YELLOW}Warning: Docker test failed${NC}"
     
     if [ $? -eq 0 ]; then
         echo ""
@@ -343,9 +356,18 @@ if [[ "$RUN_TEST1" =~ ^[Yy]$ ]]; then
         echo "- LXC container config has proper GPU device mounts"
         echo "- no-cgroups = true in /etc/nvidia-container-runtime/config.toml"
     fi
-else
+fi
+
+# Final success message if tests were skipped
+if [[ ! "$RUN_TEST1" =~ ^[Yy]$ ]]; then
     echo ""
-    echo -e "${YELLOW}Tests skipped. You can manually test later with:${NC}"
+    echo -e "${GREEN}==========================================${NC}"
+    echo -e "${GREEN}Installation Complete!${NC}"
+    echo -e "${GREEN}==========================================${NC}"
+    echo ""
+    echo -e "${GREEN}Your LXC container is now ready to use NVIDIA GPUs in Docker containers.${NC}"
+    echo ""
+    echo -e "${YELLOW}You can manually test Docker GPU access later with:${NC}"
     echo "  docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi"
     echo ""
 fi

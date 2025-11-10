@@ -4,8 +4,8 @@
 
 apt update
 echo ">>> Installing common tools:"
-echo ">>> curl, git, gpg, htop, iperf3, lshw, mc, s-tui, unzip, wget"
-apt install -y curl git gpg htop iperf3 lshw mc s-tui unzip wget
+echo ">>> curl, git, gpg, htop, iperf3, iputils-arping, lshw, mc, s-tui, unzip, wget"
+apt install -y curl git gpg htop iperf3 iputils-arping lshw mc s-tui unzip wget
 echo ">>> Installation of common tools completed."
 
 while true; do
@@ -20,7 +20,11 @@ while true; do
             echo ">>> Installing powertop and AutoASPM"
             apt install -y powertop
             echo ">>> Cloning AutoASPM repository to /opt/AutoASPM"
-            git clone https://github.com/notthebee/AutoASPM.git /opt/AutoASPM
+            if [ ! -d "/opt/AutoASPM" ]; then
+                git clone https://github.com/notthebee/AutoASPM.git /opt/AutoASPM
+            else
+                echo ">>> AutoASPM already exists, skipping clone"
+            fi
             echo ">>> Running power management optimizations via Powertop - \"powertop --auto-tune\" "
             powertop --auto-tune
             echo ">>> Running power management optimizations via AutoASPM - \"chmod u+x /opt/AutoASPM/pkgs/autoaspm.py && /opt/AutoASPM/pkgs/autoaspm.py\" "
@@ -45,10 +49,14 @@ while true; do
             ;;
         [Yy]* )
             # Check if the line already exists in ~/.bashrc
-            echo "$ps1_line" >> ~/.bashrc
-            echo "export LS_OPTIONS='--color=auto'" >> ~/.bashrc
-            echo "alias ls='ls \$LS_OPTIONS'" >> ~/.bashrc
-            echo ">>> LS and PS1 prompt added to ~/.bashrc"
+            if ! grep -q "LS_OPTIONS='--color=auto'" ~/.bashrc; then
+                echo "$ps1_line" >> ~/.bashrc
+                echo "export LS_OPTIONS='--color=auto'" >> ~/.bashrc
+                echo "alias ls='ls \$LS_OPTIONS'" >> ~/.bashrc
+                echo ">>> LS and PS1 prompt added to ~/.bashrc"
+            else
+                echo ">>> LS and PS1 prompt already in ~/.bashrc, skipping"
+            fi
             break
             ;;
         * )

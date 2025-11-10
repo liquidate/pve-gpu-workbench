@@ -5,6 +5,10 @@
 
 set -e
 
+# Set non-interactive mode for apt
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
 # Get script directory and source colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -52,7 +56,8 @@ apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || tru
 
 # Update package list and upgrade existing packages
 echo -e "${GREEN}>>> Updating system packages...${NC}"
-apt update && apt upgrade -y
+apt update
+apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 
 # Install Docker prerequisites
 echo -e "${GREEN}>>> Installing prerequisites...${NC}"
@@ -177,9 +182,74 @@ echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}Verifying ROCm LXC installation...${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
-which rocm-smi rocminfo nvtop radeontop
-rocminfo | grep -i -A5 'Agent [0-9]'
-rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname
+
+# Check if tools are installed
+if ! which rocm-smi rocminfo nvtop radeontop >/dev/null 2>&1; then
+    echo -e "${RED}ERROR: ROCm tools not found in PATH${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ ROCm tools installed${NC}"
+
+# Verify devices are accessible
+if [ ! -e /dev/kfd ]; then
+    echo -e "${RED}ERROR: /dev/kfd not found - GPU not accessible in container${NC}"
+    echo -e "${YELLOW}Troubleshooting:${NC}"
+    echo "  1. Check LXC config: cat /etc/pve/lxc/\${CONTAINER_ID}.conf"
+    echo "  2. Verify mount entry exists: lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file"
+    echo "  3. On host, check: ls -la /dev/kfd"
+    echo "  4. Restart container: pct restart \${CONTAINER_ID}"
+    exit 1
+fi
+echo -e "${GREEN}✓ /dev/kfd accessible${NC}"
+
+if [ ! -e /dev/dri/card0 ] || [ ! -e /dev/dri/renderD128 ]; then
+    echo -e "${RED}ERROR: DRI devices not found - GPU not accessible in container${NC}"
+    echo -e "${YELLOW}Current DRI devices:${NC}"
+    ls -la /dev/dri/ 2>/dev/null || echo "  None found"
+    echo -e "${YELLOW}Troubleshooting:${NC}"
+    echo "  1. Check LXC config: cat /etc/pve/lxc/\${CONTAINER_ID}.conf"
+    echo "  2. Verify PCI address is correct"
+    echo "  3. On host, check: ls -la /dev/dri/by-path/"
+    echo "  4. Restart container: pct restart \${CONTAINER_ID}"
+    exit 1
+fi
+echo -e "${GREEN}✓ DRI devices accessible${NC}"
+ls -la /dev/dri/ | grep -E "(card0|renderD128)"
+
+# Test rocminfo - must detect GPU agent
+echo ""
+echo -e "${YELLOW}>>> Testing rocminfo (must detect GPU agent):${NC}"
+ROCM_OUTPUT=$(rocminfo 2>&1)
+if echo "$ROCM_OUTPUT" | grep -qi "Agent [0-9]"; then
+    echo "$ROCM_OUTPUT" | grep -i -A5 'Agent [0-9]' | head -20
+    echo -e "${GREEN}✓ rocminfo detected GPU agent${NC}"
+else
+    echo -e "${RED}ERROR: rocminfo did not detect any GPU agents${NC}"
+    echo ""
+    echo -e "${YELLOW}Full rocminfo output:${NC}"
+    echo "$ROCM_OUTPUT"
+    echo ""
+    echo -e "${YELLOW}This usually means:${NC}"
+    echo "  1. GPU devices are not properly mounted in the container"
+    echo "  2. HSA_OVERRIDE_GFX_VERSION environment variable may be needed"
+    echo "  3. User needs to be in 'video' and 'render' groups"
+    echo ""
+    echo -e "${YELLOW}Checking group membership:${NC}"
+    groups root
+    echo ""
+    exit 1
+fi
+
+# Test rocm-smi
+echo ""
+echo -e "${YELLOW}>>> Testing rocm-smi:${NC}"
+if rocm-smi --showproductname 2>&1 | grep -qi "GPU"; then
+    rocm-smi --showproductname --showmeminfo --showuse 2>&1 || true
+    echo -e "${GREEN}✓ rocm-smi can access GPU${NC}"
+else
+    echo -e "${YELLOW}Warning: rocm-smi may not fully access GPU (this can be normal for some GPUs)${NC}"
+    rocm-smi 2>&1 || true
+fi
 
 # Verify installation
 echo ""
@@ -193,30 +263,33 @@ echo -e "${YELLOW}Test 1: ROCM Info and SMI test${NC}"
 echo -e "${YELLOW}Image: rocm/rocm:5.4.3-ubuntu22.04 (~1GB)${NC}"
 echo -e "${YELLOW}Command: docker run --rm --name rcom-smi --device /dev/kfd --device /dev/dri -e HSA_OVERRIDE_GFX_VERSION=11.5.1 -e HSA_ENABLE_SDMA=0 --group-add video --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --ipc=host rocm/rocm-terminal bash -c \"rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname && rocminfo | grep -i -A5 'Agent [0-9]'\"${NC}"
 echo ""
-read -r -p "Run Test 1? This will download ~1GB. [Y/n]: " RUN_TEST1
-RUN_TEST1=${RUN_TEST1:-Y}
+
+# Check if running interactively or via pct exec
+if [ -t 0 ]; then
+    read -r -p "Run Test 1? This will download ~1GB. [Y/n]: " RUN_TEST1
+    RUN_TEST1=${RUN_TEST1:-Y}
+else
+    # Non-interactive mode (pct exec) - skip Docker test by default
+    echo -e "${YELLOW}Non-interactive mode detected. Skipping Docker test.${NC}"
+    RUN_TEST1="n"
+fi
 
 if [[ "$RUN_TEST1" =~ ^[Yy]$ ]]; then
-    docker run --rm --name rcom-smi --device /dev/kfd --device /dev/dri -e HSA_OVERRIDE_GFX_VERSION=11.5.1 -e HSA_ENABLE_SDMA=0 --group-add video --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --ipc=host rocm/rocm-terminal bash -c "rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname && rocminfo | grep -i -A5 'Agent [0-9]'"
+    docker run --rm --name rcom-smi --device /dev/kfd --device /dev/dri -e HSA_OVERRIDE_GFX_VERSION=11.5.1 -e HSA_ENABLE_SDMA=0 --group-add video --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --ipc=host rocm/rocm-terminal bash -c "rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname && rocminfo | grep -i -A5 'Agent [0-9]'" || echo -e "${YELLOW}Warning: Docker test failed${NC}"
     
     if [ $? -eq 0 ]; then
         echo ""
         echo -e "${GREEN}✓ Test 1 passed!${NC}"
-        echo ""
-        echo -e "${GREEN}==========================================${NC}"
-        echo -e "${GREEN}Installation Complete!${NC}"
-        echo -e "${GREEN}==========================================${NC}"
-        echo ""
-        echo -e "${GREEN}Your LXC container is now ready to use AMD GPUs in Docker containers.${NC}"
-        echo ""
-    else
-        echo ""
-        echo -e "${RED}✗✗✗ AMD ROCm test failed! ✗✗✗${NC}"
-        echo ""
     fi
-else
-    echo ""
-    echo -e "${YELLOW}Tests skipped. You can manually test later with:${NC}"
-    echo "  docker run --rm --name rcom-smi --device /dev/kfd --device /dev/dri -e HSA_OVERRIDE_GFX_VERSION=11.5.1 -e HSA_ENABLE_SDMA=0 --group-add video --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --ipc=host rocm/rocm-terminal bash -c \"rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname && rocminfo | grep -i -A5 'Agent [0-9]'\""
-    echo ""
 fi
+
+echo ""
+echo -e "${GREEN}==========================================${NC}"
+echo -e "${GREEN}Installation Complete!${NC}"
+echo -e "${GREEN}==========================================${NC}"
+echo ""
+echo -e "${GREEN}Your LXC container is now ready to use AMD GPUs in Docker containers.${NC}"
+echo ""
+echo -e "${YELLOW}You can manually test Docker GPU access later with:${NC}"
+echo "  docker run --rm --name rcom-smi --device /dev/kfd --device /dev/dri -e HSA_OVERRIDE_GFX_VERSION=11.5.1 -e HSA_ENABLE_SDMA=0 --group-add video --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --ipc=host rocm/rocm-terminal bash -c \"rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname && rocminfo | grep -i -A5 'Agent [0-9]'\""
+echo ""

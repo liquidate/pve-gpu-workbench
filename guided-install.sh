@@ -15,8 +15,8 @@ source "${SCRIPT_DIR}/includes/colors.sh"
 
 # Associative arrays to store script metadata
 declare -A SCRIPT_DESCRIPTIONS
-declare -A SCRIPT_STATUS
-declare -a SCRIPT_NUMS
+declare -A SCRIPT_PATHS
+declare -a SCRIPT_COMMANDS
 
 # GPU detection results (set at startup)
 HAS_AMD_GPU=false
@@ -25,47 +25,41 @@ HAS_NVIDIA_GPU=false
 # Function to extract metadata from script header
 extract_script_metadata() {
     local script_path="$1"
-    local script_num
-    script_num=$(basename "$script_path" | grep -oP '^\d+')
+    local script_command
+    script_command=$(basename "$script_path" .sh)
     
     # Read metadata from script header
     local desc
     desc=$(grep '^# SCRIPT_DESC:' "$script_path" 2>/dev/null | sed 's/^# SCRIPT_DESC: //')
     
     # Store in arrays
-    SCRIPT_NUMS+=("$script_num")
-    SCRIPT_DESCRIPTIONS["$script_num"]="$desc"
+    SCRIPT_COMMANDS+=("$script_command")
+    SCRIPT_DESCRIPTIONS["$script_command"]="$desc"
+    SCRIPT_PATHS["$script_command"]="$script_path"
 }
 
 # Function to discover and load all scripts
 discover_scripts() {
-    # Find all scripts in host directory
+    # Find all scripts in host directory (exclude old numbered scripts and utilities)
     while IFS= read -r script_path; do
         extract_script_metadata "$script_path"
-    done < <(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "[0-9][0-9][0-9] - *.sh" -type f | sort)
-    
-    # Sort script numbers (suppress shellcheck warning - we need numeric sort)
-    # shellcheck disable=SC2207
-    IFS=$'\n' SCRIPT_NUMS=($(printf '%s\n' "${SCRIPT_NUMS[@]}" | sort -n))
-    unset IFS
+    done < <(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "*.sh" -type f | grep -v "/[0-9]" | sort)
 }
 
-# Real-time status check functions
-check_status_000() {
-    # list-gpus is always available (view-only)
-    echo "INFO"
-}
-
-check_status_002() {
-    # Check if AMD iGPU VRAM allocation is configured (amdgpu.gttsize in GRUB)
-    if grep -q "amdgpu.gttsize=" /etc/default/grub 2>/dev/null; then
-        echo "CONFIGURED"
+# Real-time status check functions (using command names)
+check_status_strix-igpu() {
+    # Check if Strix Halo iGPU VRAM allocation is configured (amdgpu.gttsize in kernel cmdline)
+    if grep -q "amdgpu.gttsize=" /proc/cmdline 2>/dev/null; then
+        # Show current allocation
+        local gtt_size=$(grep -oP 'amdgpu.gttsize=\K[0-9]+' /proc/cmdline 2>/dev/null)
+        local gtt_gb=$((gtt_size / 1024))
+        echo "${gtt_gb}GB VRAM"
     else
         echo "NOT CONFIGURED"
     fi
 }
 
-check_status_003() {
+check_status_amd-drivers() {
     # Check if AMD ROCm drivers are installed
     if command -v rocm-smi &>/dev/null || [ -d "/opt/rocm" ]; then
         echo "INSTALLED"
@@ -74,7 +68,7 @@ check_status_003() {
     fi
 }
 
-check_status_004() {
+check_status_nvidia-drivers() {
     # Check if NVIDIA drivers are installed
     if command -v nvidia-smi &>/dev/null || lsmod | grep -q "^nvidia "; then
         echo "INSTALLED"
@@ -83,25 +77,28 @@ check_status_004() {
     fi
 }
 
-check_status_005() {
-    # Check if AMD drivers are configured (kernel module loaded)
-    if lsmod | grep -q "amdgpu"; then
-        echo "CONFIGURED"
+check_status_amd-verify() {
+    # Comprehensive check: kernel module, ROCm tools, and basic functionality
+    if lsmod | grep -q "amdgpu" && \
+       command -v rocm-smi &>/dev/null && \
+       command -v rocminfo &>/dev/null && \
+       [ -e /dev/kfd ]; then
+        echo "PASSED"
     else
-        echo "NOT CONFIGURED"
+        echo "NOT VERIFIED"
     fi
 }
 
-check_status_006() {
-    # Check if NVIDIA drivers are configured (kernel module loaded)
-    if lsmod | grep -q "^nvidia "; then
-        echo "CONFIGURED"
+check_status_nvidia-verify() {
+    # Comprehensive check: kernel module and nvidia-smi
+    if lsmod | grep -q "^nvidia " && command -v nvidia-smi &>/dev/null; then
+        echo "PASSED"
     else
-        echo "NOT CONFIGURED"
+        echo "NOT VERIFIED"
     fi
 }
 
-check_status_007() {
+check_status_gpu-udev() {
     # Check if GPU udev rules exist
     if [ -f "/etc/udev/rules.d/99-gpu-passthrough.rules" ]; then
         echo "CONFIGURED"
@@ -110,7 +107,7 @@ check_status_007() {
     fi
 }
 
-check_status_008() {
+check_status_power() {
     # Check if power management services are enabled
     if systemctl is-enabled powertop.service &>/dev/null || \
        systemctl is-enabled autoaspm.service &>/dev/null; then
@@ -120,50 +117,74 @@ check_status_008() {
     fi
 }
 
+check_status_amd-upgrade() {
+    # Check if ROCm is installed and check for updates
+    if [ -f /etc/apt/sources.list.d/rocm.list ]; then
+        local current_version=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/rocm.list | head -1)
+        
+        if [ -n "$current_version" ]; then
+            # Fetch latest version from AMD repository
+            local latest_version=$(curl -s https://repo.radeon.com/rocm/apt/ 2>/dev/null | \
+                grep -oP 'href="[0-9]+\.[0-9]+/"' | \
+                grep -oP '[0-9]+\.[0-9]+' | \
+                sort -V | \
+                tail -1)
+            
+            if [ -n "$latest_version" ]; then
+                # Compare versions
+                if [ "$(printf '%s\n' "$current_version" "$latest_version" | sort -V | tail -1)" = "$latest_version" ] && \
+                   [ "$current_version" != "$latest_version" ]; then
+                    echo "${latest_version} AVAILABLE"
+                else
+                    echo "UP TO DATE"
+                fi
+            else
+                # Couldn't fetch, just show current
+                echo "v${current_version}"
+            fi
+        else
+            echo "ACTION"
+        fi
+    else
+        echo "NOT INSTALLED"
+    fi
+}
+
 # Function to check status for a script
 get_script_status() {
-    local script_num="$1"
+    local script_command="$1"
     
     # Call appropriate check function if it exists
-    if declare -f "check_status_${script_num}" &>/dev/null; then
-        "check_status_${script_num}"
+    if declare -f "check_status_${script_command}" &>/dev/null; then
+        "check_status_${script_command}"
     else
         echo ""
     fi
 }
 
-# Function to get script description by number
+# Function to get script description by command
 get_script_description() {
-    local script_num="$1"
+    local script_command="$1"
     
     # Try to get from metadata first
-    local desc="${SCRIPT_DESCRIPTIONS[$script_num]}"
+    local desc="${SCRIPT_DESCRIPTIONS[$script_command]}"
     
     if [ -n "$desc" ]; then
         echo "$desc"
     else
-        # Fallback to script filename
-        local script_path
-        script_path=$(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "${script_num} - *.sh" -type f)
-        if [ -n "$script_path" ]; then
-            basename "$script_path" | sed 's/^[0-9]\+ - //' | sed 's/\.sh$//'
-        else
-            echo "Unknown script"
-        fi
+        echo "Unknown script"
     fi
 }
 
 # Function to display script with status
 display_script() {
-    local script_path="$1"
-    local script_num
-    script_num=$(basename "$script_path" | grep -oP '^\d+')
+    local script_command="$1"
     
     # Get description and status
     local description
     local status
-    description=$(get_script_description "$script_num")
-    status=$(get_script_status "$script_num")
+    description=$(get_script_description "$script_command")
+    status=$(get_script_status "$script_command")
     
     # Format status with color (but calculate length without color codes)
     local status_display=""
@@ -171,11 +192,27 @@ display_script() {
     if [ -n "$status" ]; then
         status_plain="[$status]"
         case "$status" in
-            "INSTALLED"|"CONFIGURED"|"ENABLED")
+            "INSTALLED"|"CONFIGURED"|"ENABLED"|"PASSED")
                 status_display="${GREEN}[$status]${NC}"
                 ;;
-            "NOT INSTALLED"|"NOT CONFIGURED"|"DISABLED")
+            "NOT INSTALLED"|"NOT CONFIGURED"|"DISABLED"|"NOT VERIFIED")
                 status_display="${YELLOW}[$status]${NC}"
+                ;;
+            *"GB VRAM")
+                # Dynamic VRAM allocation (green = configured)
+                status_display="${GREEN}[$status]${NC}"
+                ;;
+            *"AVAILABLE")
+                # Update available (yellow = action recommended)
+                status_display="${YELLOW}[$status]${NC}"
+                ;;
+            "UP TO DATE")
+                # No updates needed (green = good)
+                status_display="${GREEN}[$status]${NC}"
+                ;;
+            v*)
+                # Version info (cyan = informational)
+                status_display="${CYAN}[$status]${NC}"
                 ;;
             *" UPDATES")
                 status_display="${CYAN}[$status]${NC}"
@@ -192,7 +229,7 @@ display_script() {
     # Calculate padding for right-aligned status
     # Total width: 68 chars (fits standard 80-char terminals with margin)
     local line_width=68
-    local prefix_len=8  # "  001 - "
+    local prefix_len=$((${#script_command} + 5))  # "  command - "
     local status_len=${#status_plain}
     local desc_max_len=$((line_width - prefix_len - status_len - 1))  # -1 for space before status
     
@@ -206,64 +243,115 @@ display_script() {
     local padding=$(printf "%${padding_len}s" "")
     
     # Display with right-aligned status
-    echo -e "  ${BOLD}${script_num}${NC} - ${description}${padding} ${status_display}"
+    echo -e "  ${CYAN}${script_command}${NC} - ${description}${padding} ${status_display}"
 }
 
 # Function to run a script
 run_script() {
-    local script_path="$1"
-    local script_num
-    local script_name
-    script_num=$(basename "$script_path" | grep -oP '^\d+')
-    script_name=$(basename "$script_path")
+    local script_command="$1"
+    local script_path="${SCRIPT_PATHS[$script_command]}"
+    
+    if [ -z "$script_path" ]; then
+        echo -e "${RED}Error: Unknown command '$script_command'${NC}"
+        return 1
+    fi
     
     # Clear screen for clean output
     clear
     
-    # Determine location context
+    # Determine location context based on command prefix
     local location_tag=""
     local location_desc=""
-    if [ "$script_num" -ge 1 ] && [ "$script_num" -le 9 ]; then
-        location_tag="${GREEN}[HOST]${NC}"
-        location_desc="${CYAN}Location: Proxmox host system (PVE)${NC}"
-    elif [ "$script_num" -ge 30 ] && [ "$script_num" -le 99 ]; then
+    if [[ "$script_command" == ollama-* ]] || [[ "$script_command" == comfyui-* ]]; then
         location_tag="${CYAN}[LXC]${NC}"
         location_desc="${CYAN}Location: Creates/manages LXC container${NC}"
     else
-        location_tag="${YELLOW}[UTILITY]${NC}"
-        location_desc="${CYAN}Location: Proxmox host system${NC}"
+        location_tag="${GREEN}[HOST]${NC}"
+        location_desc="${CYAN}Location: Proxmox host system (PVE)${NC}"
     fi
     
     echo ""
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}Running: ${NC}$location_tag ${GREEN}$script_name${NC}"
+    echo -e "${GREEN}Running: ${NC}$location_tag ${GREEN}$script_command${NC}"
     echo -e "$location_desc"
     echo -e "${GREEN}========================================${NC}"
     echo ""
     
     if bash "$script_path" < /dev/tty; then
         echo ""
-        echo -e "${GREEN}✓ Completed: $script_name${NC}"
+        echo -e "${GREEN}✓ Completed: $script_command${NC}"
         echo ""
         return 0
     else
         echo ""
-        echo -e "${RED}✗ Failed: $script_name${NC}"
+        echo -e "${RED}✗ Failed: $script_command${NC}"
         echo ""
         return 1
     fi
 }
 
-# Function to get available scripts in a numeric range
-get_scripts_in_range() {
-    local start="$1"
-    local end="$2"
+# Function to get host scripts (filtered by GPU type, in proper execution order)
+get_host_scripts() {
+    local gpu_type="$1"  # "amd" or "nvidia" or "all"
     
-    # Filter scripts by numeric range
-    for num in "${SCRIPT_NUMS[@]}"; do
-        if [ "$num" -ge "$start" ] && [ "$num" -le "$end" ]; then
-            # Find the actual script file
-            find "${SCRIPT_DIR}/host" -maxdepth 1 -name "${num} - *.sh" -type f
+    # Detect if Strix Halo is present
+    local is_strix_halo=false
+    if lspci 2>/dev/null | grep -qi "Strix Halo"; then
+        is_strix_halo=true
+    fi
+    
+    # Define execution order (verify scripts excluded - they're diagnostic tools)
+    local amd_order=("strix-igpu" "amd-drivers")
+    local nvidia_order=("nvidia-drivers")
+    local universal_order=("gpu-udev")
+    local optional_order=("power" "amd-upgrade")
+    
+    if [ "$gpu_type" = "amd" ]; then
+        for cmd in "${amd_order[@]}"; do
+            # Skip strix-igpu if not Strix Halo
+            if [[ "$cmd" == "strix-igpu" ]] && [ "$is_strix_halo" = false ]; then
+                continue
+            fi
+            # Only output if script exists
+            if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+                echo "$cmd"
+            fi
+        done
+    elif [ "$gpu_type" = "nvidia" ]; then
+        for cmd in "${nvidia_order[@]}"; do
+            if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+                echo "$cmd"
+            fi
+        done
+    elif [ "$gpu_type" = "universal" ]; then
+        for cmd in "${universal_order[@]}"; do
+            if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+                echo "$cmd"
+            fi
+        done
+    elif [ "$gpu_type" = "optional" ]; then
+        for cmd in "${optional_order[@]}"; do
+            if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+                echo "$cmd"
+            fi
+        done
+    fi
+}
+
+# Function to get LXC scripts (filtered by GPU type)
+get_lxc_scripts() {
+    local gpu_type="$1"  # "amd" or "nvidia" or "all"
+    
+    for command in "${SCRIPT_COMMANDS[@]}"; do
+        # Only LXC scripts
+        if [[ "$command" == ollama-* ]] || [[ "$command" == comfyui-* ]]; then
+            if [ "$gpu_type" = "amd" ] && [[ "$command" == *-amd ]]; then
+                echo "$command"
+            elif [ "$gpu_type" = "nvidia" ] && [[ "$command" == *-nvidia ]]; then
+                echo "$command"
+            elif [ "$gpu_type" = "all" ]; then
+                echo "$command"
+            fi
         fi
     done | sort
 }
@@ -301,34 +389,51 @@ show_main_menu() {
         echo ""
     fi
     
-    echo -e "${GREEN}═══ HOST CONFIGURATION ═══${NC}"
+    echo -e "${GREEN}═══ GPU SETUP ═══${NC}"
     echo ""
     
-    # List host setup scripts (002-008), filtering by GPU
-    while IFS= read -r script; do
-        local script_num
-        script_num=$(basename "$script" | grep -oP '^\d+')
-        
-        # Skip scripts 000 (GPU list - redundant) and 001 (not needed - Proxmox has built-in tools)
-        [ "$script_num" = "000" ] && continue
-        [ "$script_num" = "001" ] && continue
-        
-        # Filter GPU-specific scripts
-        case "$script_num" in
-            002|003|005)
-                # AMD-specific scripts
-                [ "$HAS_AMD_GPU" = true ] && display_script "$script"
-                ;;
-            004|006)
-                # NVIDIA-specific scripts
-                [ "$HAS_NVIDIA_GPU" = true ] && display_script "$script"
-                ;;
-            *)
-                # Universal scripts (007, 008)
-                display_script "$script"
-                ;;
-        esac
-    done < <(get_scripts_in_range 0 8)
+    # Show AMD host scripts (in logical order for display)
+    if [ "$HAS_AMD_GPU" = true ]; then
+        # Setup scripts
+        for cmd in strix-igpu amd-drivers; do
+            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+        done
+    fi
+    
+    # Show NVIDIA host scripts
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-drivers " ]] && display_script "nvidia-drivers"
+    fi
+    
+    # Show universal host scripts (gpu-udev)
+    for cmd in gpu-udev; do
+        [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+    done
+    
+    # Show verify scripts separately (not part of "setup")
+    echo ""
+    echo -e "${GREEN}═══ VERIFICATION ═══${NC}"
+    echo ""
+    if [ "$HAS_AMD_GPU" = true ]; then
+        [[ " ${SCRIPT_COMMANDS[@]} " =~ " amd-verify " ]] && display_script "amd-verify"
+    fi
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-verify " ]] && display_script "nvidia-verify"
+    fi
+    
+    # Show optional scripts
+    echo ""
+    echo -e "${CYAN}═══ OPTIONAL ═══${NC}"
+    echo ""
+    for cmd in power; do
+        [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+    done
+    # AMD-specific optional scripts
+    if [ "$HAS_AMD_GPU" = true ]; then
+        for cmd in amd-upgrade; do
+            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+        done
+    fi
     
     echo ""
     echo -e "${GREEN}═══ LXC CONTAINERS ═══${NC}"
@@ -337,33 +442,29 @@ show_main_menu() {
     # Show LXC scripts based on detected GPU
     local lxc_scripts_shown=false
     if [ "$HAS_AMD_GPU" = true ]; then
-        while IFS= read -r script; do
-            display_script "$script"
+        for cmd in $(get_lxc_scripts "amd"); do
+            display_script "$cmd"
             lxc_scripts_shown=true
-        done < <(get_scripts_in_range 30 39)
+        done
     fi
     
     if [ "$HAS_NVIDIA_GPU" = true ]; then
-        while IFS= read -r script; do
-            display_script "$script"
+        for cmd in $(get_lxc_scripts "nvidia"); do
+            display_script "$cmd"
             lxc_scripts_shown=true
-        done < <(get_scripts_in_range 40 49)
+        done
     fi
     
     if [ "$lxc_scripts_shown" = false ]; then
         echo -e "  ${YELLOW}No GPU detected - LXC creation unavailable${NC}"
-        echo -e "  ${GRAY}Run script 004 to detect GPUs${NC}"
     fi
-    
-    # Utilities section removed - script 999 (Proxmox upgrade) is out of scope
-    # This is a GPU setup tool, not a general Proxmox maintenance tool
     
     echo ""
     echo -e "${YELLOW}Commands:${NC}"
-    echo "  all          - Run all Host Configuration scripts"
-    echo "  <number>     - Run specific script (e.g., 1, 3, 30)"
-    echo "  i/info       - Show system information"
-    echo "  q/quit       - Exit"
+    echo "  setup           - Run all GPU Setup scripts (reboot + verify after)"
+    echo "  <command>       - Run specific script (e.g., strix-igpu, ollama-amd)"
+    echo "  [i]nfo          - Show system information"
+    echo "  [q]uit          - Exit"
     echo ""
 }
 
@@ -437,14 +538,15 @@ show_system_info() {
 
 # Function to prompt user before running script with detailed info
 confirm_run_with_info() {
-    local script_path="$1"
-    local script_num
-    script_num=$(basename "$script_path" | grep -oP '^\d+')
+    local script_command="$1"
+    
+    # Clear screen for clean presentation
+    clear
     
     # Get description and status
     local description status
-    description=$(get_script_description "$script_num")
-    status=$(get_script_status "$script_num")
+    description=$(get_script_description "$script_command")
+    status=$(get_script_status "$script_command")
     
     # Show status info
     local status_msg=""
@@ -454,7 +556,7 @@ confirm_run_with_info() {
     
     echo ""
     echo -e "${GREEN}──────────────────────────────────────${NC}"
-    echo -e "${GREEN}[$script_num] $description${NC}${status_msg}"
+    echo -e "${GREEN}[$script_command] $description${NC}${status_msg}"
     echo -e "${GREEN}──────────────────────────────────────${NC}"
     read -r -p "Run this script? [Y/n/q]: " choice < /dev/tty
     choice=${choice:-Y}
@@ -481,15 +583,15 @@ detect_gpus
 while true; do
     show_main_menu
     
-    read -r -p "Enter your choice [all]: " choice
-    choice=${choice:-all}  # Default to "all"
+    read -r -p "Enter your choice [setup]: " choice
+    choice=${choice:-setup}  # Default to "setup"
     choice=${choice,,}  # Convert to lowercase
     
     case "$choice" in
-        "all")
+        "setup"|"all")  # Accept both "setup" and legacy "all"
             echo ""
             echo -e "${GREEN}========================================${NC}"
-            echo -e "${GREEN}Running all Host Configuration scripts...${NC}"
+            echo -e "${GREEN}Running GPU Setup scripts...${NC}"
             echo -e "${GREEN}========================================${NC}"
             echo ""
             echo -e "${YELLOW}You will be asked before each script runs.${NC}"
@@ -497,90 +599,111 @@ while true; do
             echo ""
             
             quit_requested=false
-            while IFS= read -r script; do
-                local script_num
-                script_num=$(basename "$script" | grep -oP '^\d+')
-                
-                # Skip scripts 000 (GPU list - redundant) and 001 (not needed - Proxmox has built-in tools)
-                if [ "$script_num" = "000" ] || [ "$script_num" = "001" ]; then
-                    continue
-                fi
-                
-                # Filter GPU-specific scripts (skip if hardware not present)
-                case "$script_num" in
-                    002|003|005)
-                        # AMD-specific scripts
-                        if [ "$HAS_AMD_GPU" = false ]; then
-                            echo -e "${DIM}Skipping $(basename "$script") - No AMD GPU detected${NC}"
-                            sleep 0.3
-                            continue
-                        fi
-                        ;;
-                    004|006)
-                        # NVIDIA-specific scripts
-                        if [ "$HAS_NVIDIA_GPU" = false ]; then
-                            echo -e "${DIM}Skipping $(basename "$script") - No NVIDIA GPU detected${NC}"
-                            sleep 0.3
-                            continue
-                        fi
-                        ;;
-                esac
-                
-                # Always ask user with detailed information
-                confirm_run_with_info "$script"
-                result=$?
-                
-                if [ $result -eq 2 ]; then
-                    # User chose to quit back to main menu
-                    echo -e "${YELLOW}Returning to main menu...${NC}"
-                    quit_requested=true
-                    break
-                elif [ $result -eq 0 ]; then
-                    # User chose to run the script
-                    if ! run_script "$script"; then
-                        echo ""
-                        read -r -p "Script failed. Continue with next script? [y/N]: " continue_choice < /dev/tty
-                        continue_choice=${continue_choice:-N}
-                        if [[ ! "$continue_choice" =~ ^[Yy]$ ]]; then
-                            break
+            reboot_needed=false
+            scripts_run=0
+            
+            # Run all AMD host scripts
+            if [ "$HAS_AMD_GPU" = true ]; then
+                for cmd in $(get_host_scripts "amd"); do
+                    confirm_run_with_info "$cmd"
+                    result=$?
+                    
+                    if [ $result -eq 2 ]; then
+                        quit_requested=true
+                        break
+                    elif [ $result -eq 0 ]; then
+                        if run_script "$cmd"; then
+                            ((scripts_run++))
+                            # Scripts that require reboot
+                            if [[ "$cmd" == "strix-igpu" ]] || [[ "$cmd" == "amd-drivers" ]]; then
+                                reboot_needed=true
+                            fi
+                        else
+                            read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
+                            [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
                         fi
                     fi
-                    # Small delay to ensure clean terminal state
-                    sleep 0.5
-                else
-                    # User chose to skip
-                    echo -e "${YELLOW}Skipped by user: $(basename "$script")${NC}"
-                    # Small delay to ensure clean terminal state
-                    sleep 0.5
-                fi
-            done < <(get_scripts_in_range 0 8)
+                done
+            fi
+            
+            # Run all NVIDIA host scripts
+            if [ "$quit_requested" = false ] && [ "$HAS_NVIDIA_GPU" = true ]; then
+                for cmd in $(get_host_scripts "nvidia"); do
+                    confirm_run_with_info "$cmd"
+                    result=$?
+                    
+                    if [ $result -eq 2 ]; then
+                        quit_requested=true
+                        break
+                    elif [ $result -eq 0 ]; then
+                        if run_script "$cmd"; then
+                            ((scripts_run++))
+                            # nvidia-drivers requires reboot
+                            if [[ "$cmd" == "nvidia-drivers" ]]; then
+                                reboot_needed=true
+                            fi
+                        else
+                            read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
+                            [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
+                        fi
+                    fi
+                done
+            fi
+            
+            # Run universal host scripts
+            if [ "$quit_requested" = false ]; then
+                for cmd in $(get_host_scripts "universal"); do
+                    confirm_run_with_info "$cmd"
+                    result=$?
+                    
+                    if [ $result -eq 2 ]; then
+                        quit_requested=true
+                        break
+                    elif [ $result -eq 0 ]; then
+                        if run_script "$cmd"; then
+                            ((scripts_run++))
+                        else
+                            read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
+                            [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
+                        fi
+                    fi
+                done
+            fi
             
             if [ "$quit_requested" = false ]; then
                 echo ""
                 echo -e "${GREEN}========================================${NC}"
-                echo -e "${GREEN}Host Configuration process completed!${NC}"
+                echo -e "${GREEN}GPU Setup completed!${NC}"
                 echo -e "${GREEN}========================================${NC}"
-                read -r -p "Press Enter to continue..." < /dev/tty
-            fi
-            ;;
-            
-        [0-9]|[0-9][0-9]|[0-9][0-9][0-9])
-            # Run specific script - pad to 3 digits
-            padded_choice=$(printf "%03d" "$choice" 2>/dev/null)
-            
-            if [ -z "$padded_choice" ]; then
-                echo -e "${RED}Invalid script number: $choice${NC}"
-                read -r -p "Press Enter to continue..."
-            else
-                script_path=$(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "${padded_choice} - *.sh" -type f)
+                echo ""
                 
-                if [ -z "$script_path" ]; then
-                    echo -e "${RED}Script $padded_choice not found!${NC}"
-                    read -r -p "Press Enter to continue..."
+                if [ "$scripts_run" -eq 0 ]; then
+                    echo -e "${CYAN}No scripts were run (all skipped or already configured)${NC}"
+                    echo ""
+                elif [ "$reboot_needed" = true ]; then
+                    echo -e "${YELLOW}⚠  IMPORTANT NEXT STEPS:${NC}"
+                    echo -e "${CYAN}1.${NC} ${BOLD}Reboot your system${NC} (kernel parameters/drivers changed)"
+                    echo -e "${CYAN}2.${NC} After reboot, run verification:"
+                    if [ "$HAS_AMD_GPU" = true ]; then
+                        echo -e "   ${BOLD}amd-verify${NC} - Comprehensive verification"
+                    fi
+                    if [ "$HAS_NVIDIA_GPU" = true ]; then
+                        echo -e "   ${BOLD}nvidia-verify${NC} - Comprehensive verification"
+                    fi
+                    echo ""
                 else
-                    run_script "$script_path"
-                    read -r -p "Press Enter to continue..."
+                    echo -e "${GREEN}✓ All changes applied successfully!${NC}"
+                    echo -e "${CYAN}Note:${NC} You can run verification anytime:"
+                    if [ "$HAS_AMD_GPU" = true ]; then
+                        echo -e "   ${BOLD}amd-verify${NC} - Comprehensive verification"
+                    fi
+                    if [ "$HAS_NVIDIA_GPU" = true ]; then
+                        echo -e "   ${BOLD}nvidia-verify${NC} - Comprehensive verification"
+                    fi
+                    echo ""
                 fi
+                
+                read -r -p "Press Enter to continue..." < /dev/tty
             fi
             ;;
             
@@ -596,8 +719,15 @@ while true; do
             ;;
             
         *)
-            echo -e "${RED}Invalid choice!${NC}"
-            read -r -p "Press Enter to continue..."
+            # Try to run as a command
+            if [ -n "${SCRIPT_PATHS[$choice]}" ]; then
+                run_script "$choice"
+                read -r -p "Press Enter to continue..." < /dev/tty
+            else
+                echo -e "${RED}Invalid choice: $choice${NC}"
+                echo -e "${YELLOW}Valid commands: ${CYAN}$(echo "${SCRIPT_COMMANDS[@]}" | tr ' ' ', ')${NC}"
+                read -r -p "Press Enter to continue..." < /dev/tty
+            fi
             ;;
     esac
 done

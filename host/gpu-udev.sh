@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Setup udev rules for GPU device permissions
+# SCRIPT_DESC: Setup udev GPU device permissions
 # SCRIPT_DETECT: [ -f /etc/udev/rules.d/99-gpu-passthrough.rules ]
 
 echo ">>> Setting up UDEV rules for persistent GPU device naming"

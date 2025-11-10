@@ -1,220 +1,187 @@
-# Proxmox-Setup-Scripts
+# Proxmox GPU Setup Scripts
 
-Automated scripts for setting up GPU-enabled LXC containers on Proxmox with persistent device mapping.
-
-## Quick Start
-
-### Option 1: Guided Installation (Recommended)
-
-```bash
-cd /root
-git clone https://github.com/jammsen/proxmox-setup-scripts.git
-cd proxmox-setup-scripts
-./guided-install.sh
-```
-
-The guided installer provides:
-- ✅ **Interactive menu** with progress tracking
-- ✅ **Auto-detection** of completed steps (shows green checkmarks)
-- ✅ **Smart defaults** - "all" runs Basic Host Setup with confirmations
-- ✅ **Flexible execution** - Run individual scripts, ranges, or all steps
-- ✅ **Progress persistence** - Resume where you left off
-
-### Option 2: Manual Installation
-
-### 1. Clone Repository on Proxmox Host
-
-```bash
-cd /root
-git clone https://github.com/jammsen/proxmox-setup-scripts.git
-cd proxmox-setup-scripts
-```
-
-### 2. Setup GPU on Host (if needed)
-
-```bash
-cd host
-
-# For NVIDIA GPUs:
-./004 - install-nvidia-drivers.sh
-
-# For AMD GPUs:
-./003 - install-amd-drivers.sh
-
-# Setup udev rules for persistent GPU device paths:
-./006 - setup-udev-gpu-rules.sh
-```
-
-### 3. Create GPU-Enabled LXC Container
-
-```bash
-cd /root/proxmox-setup-scripts/host
-./008 - create-gpu-lxc.sh
-```
-
-This script will:
-- Auto-detect available GPUs
-- Create LXC container with GPU passthrough
-- Configure persistent PCI-based device mapping
-- **Automatically mount scripts directory** at `/root/proxmox-setup-scripts` inside container
-- Enable SSH access
-
-### 4. Install Docker + NVIDIA Container Toolkit
-
-#### Option A: Run from Host (Recommended)
-
-```bash
-# Run installation script directly from host into container
-pct exec <CONTAINER_ID> -- bash /root/proxmox-setup-scripts/lxc/install-docker-and-container-runtime-in-lxc-guest.sh
-```
-
-#### Option B: SSH into Container
-
-```bash
-# SSH into container
-ssh root@<CONTAINER_IP>
-
-# Navigate to mounted scripts
-cd /root/proxmox-setup-scripts/lxc
-
-# Run installation
-./install-docker-and-container-runtime-in-lxc-guest.sh
-```
-
-### 5. Verify GPU Access
-
-```bash
-# From host:
-pct exec <CONTAINER_ID> -- docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
-
-# From inside container:
-docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
-```
+Automated setup scripts for GPU passthrough to LXC containers on Proxmox VE.
 
 ## Features
 
-- **Persistent GPU Mapping**: Uses PCI paths (`/dev/dri/by-path/pci-*`) instead of card0/card1
-- **Automatic GPU Detection**: Detects AMD and NVIDIA GPUs with vendor filtering
-- **Scripts Available Inside Container**: Repository auto-mounted at `/root/proxmox-setup-scripts`
-- **Interactive Setup**: User-friendly prompts with sensible defaults
-- **Full Testing Suite**: PyTorch CUDA validation included
+- **AMD GPU Support**: ROCm drivers, Strix Halo iGPU VRAM configuration
+- **GPU Passthrough**: Automated udev rules and device permissions
+- **LXC Creation**: Pre-configured containers for Ollama with GPU access
+- **Interactive Menu**: Guided installation with real-time status checks
+- **Version Management**: Selectable ROCm versions with update detection
 
-## Repository Structure
+## Quick Start
 
-```
-proxmox-setup-scripts/
-├── guided-install.sh   # Interactive guided installer (START HERE!)
-├── host/               # Host-side scripts (run on Proxmox)
-│   ├── 000-list-gpus.sh
-│   ├── 001-install-tools.sh
-│   ├── 002-setup-igpu-vram.sh
-│   ├── 003-install-amd-drivers.sh
-│   ├── 004-install-nvidia-drivers.sh
-│   ├── 005-verify-nvidia-drivers.sh
-│   ├── 006-setup-udev-gpu-rules.sh
-│   ├── 007-upgrade-proxmox.sh
-│   └── 011-create-gpu-lxc.sh (main LXC creation script)
-├── lxc/                # Guest-side scripts (run in LXC container)
-│   ├── install-docker-and-container-runtime-in-lxc-guest.sh
-│   └── troubleshoot-nvidia-docker.sh
-├── includes/           # Shared libraries
-│   └── colors.sh
-└── README.md
-```
+### One-Line Installation
 
-## Guided Installer Usage
-
-The `guided-install.sh` script provides an interactive menu:
+Run this command on your fresh Proxmox VE installation:
 
 ```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/main/bootstrap.sh)"
+```
+
+This will:
+1. Install git (if not present)
+2. Clone this repository to `/root/proxmox-setup-scripts`
+3. Set up permissions
+4. Launch the guided installer
+
+### Manual Installation
+
+```bash
+# Install git
+apt update && apt install -y git
+
+# Clone repository
+git clone https://github.com/liquidate/proxmox-setup-scripts.git
+cd proxmox-setup-scripts
+
+# Run guided installer
 ./guided-install.sh
 ```
 
-### Menu Options:
+## Usage
 
-- **`all`** - Run all Basic Host Setup scripts (000-009) with interactive prompts [DEFAULT]
-  - ✅ Shows detailed description for each script
-  - ✅ Displays completion status (already completed ✓)
-  - ✅ **Always asks** before running each script (never auto-skips)
-  - ✅ Default answer is "Y" - just press Enter to continue
-  - ✅ Press "n" to skip any script you don't need
-  - ✅ Never runs LXC Container Setup (010-019) automatically
-  
-- **`<number>`** - Run specific script by number
-  - Example: `004` runs NVIDIA driver installation
-  
-- **`<start-end>`** - Run range of scripts
-  - Example: `001-006` runs tools, drivers, and udev setup
-  
-- **`reset`** - Clear progress tracking to start fresh
+### Guided Installer
 
-- **`quit`** - Exit the installer
-
-### Progress Tracking:
-
-The installer automatically detects completed steps by checking:
-- Installed packages (htop, nvtop, nvidia-smi)
-- Loaded kernel modules (amdgpu, nvidia)
-- Configuration files (udev rules, kernel parameters)
-- Shows **green checkmarks (✓)** for completed steps
-
-Progress is saved to `.install-progress` file.
-
-### Example Session:
+The main menu provides an interactive interface:
 
 ```
-========================================
-Proxmox GPU Setup - Guided Installer
-========================================
+╔══════════════════════════════════════╗
+║  Proxmox Setup - Guided Installer    ║
+╚══════════════════════════════════════╝
 
-Progress: 3 steps completed
+═══ GPU SETUP ═══
 
-=== Basic Host Setup (000-009) ===
+  strix-igpu - Configure Strix Halo iGPU VRAM allocation [96GB VRAM]
+  amd-drivers - Install AMD ROCm GPU drivers              [INSTALLED]
+  gpu-udev - Setup udev GPU device permissions           [CONFIGURED]
 
-  [000]: List all available GPUs and their PCI paths
-✓ [001]: Install essential tools (htop, nvtop, etc.)
-  [002]: Setup Intel iGPU VRAM allocation
-  [003]: Install AMD GPU drivers
-✓ [004]: Install NVIDIA GPU drivers
-✓ [005]: Verify NVIDIA driver installation
-  [006]: Setup udev rules for GPU device permissions
-  [007]: Upgrade Proxmox to latest version
+═══ VERIFICATION ═══
 
-=== LXC Container Setup (010-019) ===
+  amd-verify - Comprehensive AMD GPU setup verification     [PASSED]
 
-  [011]: Create GPU-enabled LXC container (AMD or NVIDIA)
+═══ OPTIONAL ═══
 
-Options:
-  all          - Run all Basic Host Setup scripts (with confirmations) [DEFAULT]
-  <number>     - Run specific script by number (e.g., 001, 004)
-  <start-end>  - Run range of scripts (e.g., 001-006)
-  reset        - Clear progress tracking
-  quit         - Exit installer
+  power - Toggle power management (powertop + AutoASPM)    [ENABLED]
+  amd-upgrade - Upgrade AMD ROCm to a different version [UP TO DATE]
 
-Enter your choice [all]:
+═══ LXC CONTAINERS ═══
+
+  ollama-amd - Create Ollama LXC (AMD GPU)
+
+Commands:
+  setup           - Run all GPU Setup scripts (reboot + verify after)
+  <command>       - Run specific script (e.g., strix-igpu, ollama-amd)
+  [i]nfo          - Show system information
+  [q]uit          - Exit
 ```
 
-## Key Benefits of This Approach
+### Quick Setup
 
-1. **No File Copying**: Scripts mounted directly from host
-2. **Always Up-to-Date**: Pull changes with `git pull` on host, available immediately in all containers
-3. **Easy Execution**: Run scripts from host using `pct exec` or from inside container
-4. **Version Control**: All containers use the same script version from git
-5. **Easy Updates**: Update scripts once on host, available to all containers
+For a complete setup, simply run:
+
+```bash
+./guided-install.sh
+# At the prompt, type: setup
+```
+
+This will:
+1. Run all necessary host configuration scripts
+2. Prompt for reboot (if needed)
+3. Run verification scripts after reboot
+
+### Individual Scripts
+
+You can also run individual scripts directly:
+
+```bash
+# Configure Strix Halo iGPU VRAM
+./host/strix-igpu.sh
+
+# Install AMD ROCm drivers
+./host/amd-drivers.sh
+
+# Create Ollama LXC container
+./host/ollama-amd.sh
+```
+
+## Supported Hardware
+
+### AMD GPUs
+- AMD Radeon RX/Pro series
+- AMD Radeon Pro WX series
+- AMD Strix Halo APU (with iGPU VRAM configuration)
+
+### ROCm Versions
+- Dynamically fetched from AMD's repository
+- Currently supports ROCm 6.x - 7.x
+- Automatic update detection
+
+## What Gets Installed
+
+### Host Configuration
+- AMD ROCm drivers and libraries
+- GPU udev rules for container passthrough
+- Kernel parameters for iGPU VRAM (Strix Halo only)
+- Optional: Power management tools (powertop, AutoASPM)
+
+### LXC Containers
+- **Ollama**: Native installation with AMD GPU support
+  - ROCm utilities (rocm-smi, radeontop)
+  - Pre-configured for network access
+  - Ready for Open WebUI integration
+
+## Requirements
+
+- Proxmox VE 8.x (tested on PVE 8.2+)
+- AMD GPU or APU
+- Root access
+- Internet connection (for package downloads)
+
+## Updating
+
+To update the scripts:
+
+```bash
+cd /root/proxmox-setup-scripts
+git pull
+```
+
+Or use the bootstrap script again:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/main/bootstrap.sh)"
+```
 
 ## Troubleshooting
 
-If GPU isn't detected in container:
-
+### Verification Fails
+Run the verification script for detailed diagnostics:
 ```bash
-# Check devices from host:
-pct exec <CONTAINER_ID> -- ls -la /dev/nvidia*
-pct exec <CONTAINER_ID> -- ls -la /dev/dri/
-
-# Run troubleshooting script:
-pct exec <CONTAINER_ID> -- bash /root/proxmox-setup-scripts/lxc/troubleshoot-nvidia-docker.sh
+./host/amd-verify.sh
 ```
 
-## Helpful Links
+### GPU Not Detected in Container
+1. Verify udev rules: `./host/gpu-udev.sh`
+2. Check device permissions: `ls -l /dev/dri/ /dev/kfd`
+3. Reboot if kernel parameters were changed
 
-- https://jocke.no/2025/04/20/plex-gpu-transcoding-in-docker-on-lxc-on-proxmox-v2/#comment-130670
+### ROCm Installation Issues
+- Check AMD ROCm version compatibility
+- Try a different version: `./host/amd-upgrade.sh`
+- Verify internet connectivity to AMD repositories
+
+## Contributing
+
+Contributions welcome! Please test on a fresh Proxmox VE installation before submitting.
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Acknowledgments
+
+- Proxmox VE team
+- AMD ROCm team
+- Community Scripts project for inspiration

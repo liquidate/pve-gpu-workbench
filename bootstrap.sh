@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#
+# Proxmox GPU Setup Scripts - Bootstrap Installer
+# 
+# Usage:
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/main/bootstrap.sh)"
+#
+
+set -e
+
+REPO_URL="https://github.com/liquidate/proxmox-setup-scripts.git"
+INSTALL_DIR="/root/proxmox-setup-scripts"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  Proxmox GPU Setup - Installer      ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo ""
+
+# Check if already installed
+if [ -d "$INSTALL_DIR" ]; then
+    echo -e "${YELLOW}Installation directory already exists: $INSTALL_DIR${NC}"
+    read -p "Would you like to update the existing installation? [y/N]: " UPDATE
+    UPDATE=${UPDATE:-N}
+    
+    if [[ "$UPDATE" =~ ^[Yy]$ ]]; then
+        echo -e "${CYAN}>>> Updating existing installation...${NC}"
+        cd "$INSTALL_DIR"
+        git pull
+        echo ""
+        echo -e "${GREEN}✓ Updated successfully!${NC}"
+        echo ""
+        read -p "Launch guided installer? [Y/n]: " LAUNCH
+        LAUNCH=${LAUNCH:-Y}
+        if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
+            bash "$INSTALL_DIR/guided-install.sh"
+        fi
+        exit 0
+    else
+        echo "Installation cancelled."
+        exit 0
+    fi
+fi
+
+# Check if git is installed
+echo -e "${CYAN}>>> Checking for git...${NC}"
+if ! command -v git &>/dev/null; then
+    echo "Git not found. Installing..."
+    apt-get update -qq
+    apt-get install -y git
+    echo -e "${GREEN}✓ Git installed${NC}"
+else
+    echo -e "${GREEN}✓ Git is already installed${NC}"
+fi
+
+# Clone the repository
+echo ""
+echo -e "${CYAN}>>> Cloning repository...${NC}"
+git clone "$REPO_URL" "$INSTALL_DIR"
+
+# Make all scripts executable
+echo -e "${CYAN}>>> Setting up permissions...${NC}"
+chmod +x "$INSTALL_DIR/guided-install.sh"
+chmod +x "$INSTALL_DIR"/host/*.sh
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  Installation Complete!              ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${CYAN}Scripts installed to:${NC} $INSTALL_DIR"
+echo ""
+echo -e "${YELLOW}To get started:${NC}"
+echo "  cd $INSTALL_DIR"
+echo "  ./guided-install.sh"
+echo ""
+
+# Prompt to launch
+read -p "Launch guided installer now? [Y/n]: " LAUNCH
+LAUNCH=${LAUNCH:-Y}
+
+if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
+    cd "$INSTALL_DIR"
+    bash "$INSTALL_DIR/guided-install.sh"
+fi
+

@@ -458,24 +458,43 @@ echo -e "${GREEN}Installing Ollama${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-echo -e "${GREEN}>>> Updating system packages (this may take 1-2 minutes)...${NC}"
-pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1 &
-UPDATE_PID=$!
-while kill -0 $UPDATE_PID 2>/dev/null; do
-    echo -n "."
-    sleep 2
-done
-wait $UPDATE_PID
+echo -e "${GREEN}>>> Updating package list...${NC}"
+pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1
 
-pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1 &
-UPGRADE_PID=$!
-while kill -0 $UPGRADE_PID 2>/dev/null; do
-    echo -n "."
-    sleep 2
-done
-wait $UPGRADE_PID
-echo ""
-echo -e "${GREEN}✓ System packages updated${NC}"
+# Count packages to upgrade
+PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
+
+if [ "$PACKAGE_COUNT" -gt 0 ]; then
+    echo -e "${GREEN}>>> Upgrading $PACKAGE_COUNT packages...${NC}"
+    
+    # Progress bar settings
+    BAR_WIDTH=50
+    
+    # Run upgrade and capture progress
+    pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' 2>&1" | {
+        COMPLETED=0
+        while IFS= read -r line; do
+            # Count completed packages (look for "Setting up" which is the final step)
+            if echo "$line" | grep -q "^Setting up"; then
+                COMPLETED=$((COMPLETED + 1))
+                # Calculate progress
+                PERCENT=$((COMPLETED * 100 / PACKAGE_COUNT))
+                FILLED=$((BAR_WIDTH * COMPLETED / PACKAGE_COUNT))
+                EMPTY=$((BAR_WIDTH - FILLED))
+                
+                # Draw progress bar
+                printf "\r${GREEN}[${NC}"
+                printf "%${FILLED}s" | tr ' ' '='
+                printf "%${EMPTY}s" | tr ' ' ' '
+                printf "${GREEN}]${NC} %3d%% (%d/%d)" "$PERCENT" "$COMPLETED" "$PACKAGE_COUNT"
+            fi
+        done
+        echo ""
+    }
+    echo -e "${GREEN}✓ System packages updated${NC}"
+else
+    echo -e "${GREEN}✓ All packages up to date${NC}"
+fi
 
 echo -e "${GREEN}>>> Installing dependencies...${NC}"
 pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >/dev/null 2>&1

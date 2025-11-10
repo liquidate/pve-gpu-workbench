@@ -375,7 +375,7 @@ pct create $CONTAINER_ID \
     --net0 name=eth0,bridge=vmbr0,ip=${IP_ADDRESS}/${BRIDGE_CIDR},gw=${GATEWAY} \
     --storage "$STORAGE" \
     --rootfs "$STORAGE:${DISK_SIZE}" \
-    --unprivileged 1 \
+    --unprivileged 0 \
     --features nesting=1 \
     --start 0 >/dev/null 2>&1
 

@@ -24,7 +24,8 @@ This will:
 1. Install git (if not present)
 2. Clone this repository to `/root/proxmox-setup-scripts`
 3. Set up permissions
-4. Launch the guided installer
+4. Optionally create system-wide commands (`pve-gpu`, `pve-gpu-update`)
+5. Launch the guided installer
 
 ### Manual Installation
 
@@ -41,6 +42,18 @@ cd proxmox-setup-scripts
 ```
 
 ## Usage
+
+### System-Wide Commands (Recommended)
+
+If you accepted the system-wide commands during installation, you can run from anywhere:
+
+```bash
+# Launch guided installer
+pve-gpu
+
+# Update scripts from GitHub
+pve-gpu-update
+```
 
 ### Guided Installer
 

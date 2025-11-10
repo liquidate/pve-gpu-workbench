@@ -37,6 +37,20 @@ if [ -d "$INSTALL_DIR" ]; then
         echo ""
         echo -e "${GREEN}✓ Updated successfully!${NC}"
         echo ""
+        
+        # Check if system-wide commands exist, if not offer to create them
+        if [ ! -L /usr/local/bin/pve-gpu ]; then
+            read -p "Create system-wide 'pve-gpu' commands? [Y/n]: " CREATE_LINKS
+            CREATE_LINKS=${CREATE_LINKS:-Y}
+            
+            if [[ "$CREATE_LINKS" =~ ^[Yy]$ ]]; then
+                ln -sf "$INSTALL_DIR/guided-install.sh" /usr/local/bin/pve-gpu
+                ln -sf "$INSTALL_DIR/update" /usr/local/bin/pve-gpu-update
+                echo -e "${GREEN}✓ Created commands:${NC} pve-gpu, pve-gpu-update"
+                echo ""
+            fi
+        fi
+        
         read -p "Launch guided installer? [Y/n]: " LAUNCH
         LAUNCH=${LAUNCH:-Y}
         if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
@@ -78,10 +92,25 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "${CYAN}Scripts installed to:${NC} $INSTALL_DIR"
 echo ""
-echo -e "${YELLOW}To get started:${NC}"
-echo "  cd $INSTALL_DIR"
-echo "  ./guided-install.sh"
-echo ""
+
+# Offer to create system-wide commands
+read -p "Create system-wide 'pve-gpu' commands (recommended)? [Y/n]: " CREATE_LINKS
+CREATE_LINKS=${CREATE_LINKS:-Y}
+
+if [[ "$CREATE_LINKS" =~ ^[Yy]$ ]]; then
+    echo -e "${CYAN}>>> Creating system-wide commands...${NC}"
+    ln -sf "$INSTALL_DIR/guided-install.sh" /usr/local/bin/pve-gpu
+    ln -sf "$INSTALL_DIR/update" /usr/local/bin/pve-gpu-update
+    echo -e "${GREEN}✓ Created commands:${NC}"
+    echo "  pve-gpu        - Launch guided installer"
+    echo "  pve-gpu-update - Update scripts from GitHub"
+    echo ""
+else
+    echo -e "${YELLOW}To get started:${NC}"
+    echo "  cd $INSTALL_DIR"
+    echo "  ./guided-install.sh"
+    echo ""
+fi
 
 # Prompt to launch
 read -p "Launch guided installer now? [Y/n]: " LAUNCH

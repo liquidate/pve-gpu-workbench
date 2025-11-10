@@ -69,9 +69,9 @@ check_status_001() {
 check_status_002() {
     # Check if AMD iGPU VRAM allocation is configured (amdgpu.gttsize in GRUB)
     if grep -q "amdgpu.gttsize=" /etc/default/grub 2>/dev/null; then
-        echo "ENABLED"
+        echo "CONFIGURED"
     else
-        echo "NOT ENABLED"
+        echo "NOT CONFIGURED"
     fi
 }
 
@@ -94,20 +94,20 @@ check_status_004() {
 }
 
 check_status_005() {
-    # Check if AMD drivers are verified/loaded
+    # Check if AMD drivers are configured (kernel module loaded)
     if lsmod | grep -q "amdgpu"; then
-        echo "LOADED"
+        echo "CONFIGURED"
     else
-        echo "NOT LOADED"
+        echo "NOT CONFIGURED"
     fi
 }
 
 check_status_006() {
-    # Check if NVIDIA drivers are verified/loaded
+    # Check if NVIDIA drivers are configured (kernel module loaded)
     if lsmod | grep -q "^nvidia "; then
-        echo "LOADED"
+        echo "CONFIGURED"
     else
-        echo "NOT LOADED"
+        echo "NOT CONFIGURED"
     fi
 }
 
@@ -188,10 +188,10 @@ display_script() {
     local status_display=""
     if [ -n "$status" ]; then
         case "$status" in
-            "INSTALLED"|"ENABLED"|"CONFIGURED"|"UP TO DATE")
+            "INSTALLED"|"CONFIGURED"|"ENABLED")
                 status_display="${GREEN}[$status]${NC}"
                 ;;
-            "NOT INSTALLED"|"NOT ENABLED"|"DEFAULT")
+            "NOT INSTALLED"|"NOT CONFIGURED"|"DISABLED")
                 status_display="${YELLOW}[$status]${NC}"
                 ;;
             *" UPDATES")

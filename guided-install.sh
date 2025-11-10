@@ -130,10 +130,6 @@ check_status_008() {
     fi
 }
 
-check_status_999() {
-    echo "ACTION"
-}
-
 # Function to check status for a script
 get_script_status() {
     local script_num="$1"
@@ -300,7 +296,7 @@ detect_gpus() {
 show_main_menu() {
     clear
     echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║   Proxmox Setup - Guided Installer  ║${NC}"
+    echo -e "${GREEN}║  Proxmox Setup - Guided Installer   ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     
@@ -365,21 +361,15 @@ show_main_menu() {
         echo -e "  ${GRAY}Run script 004 to detect GPUs${NC}"
     fi
     
-    echo ""
-    echo -e "${GREEN}═══ UTILITIES ═══${NC}"
-    echo ""
-    
-    # List utility scripts (999)
-    while IFS= read -r script; do
-        display_script "$script"
-    done < <(get_scripts_in_range 999 999)
+    # Utilities section removed - script 999 (Proxmox upgrade) is out of scope
+    # This is a GPU setup tool, not a general Proxmox maintenance tool
     
     echo ""
     echo -e "${YELLOW}Commands:${NC}"
-    echo "  all          - Run all Host Configuration scripts with confirmations"
-    echo "  <number>     - Run specific script by number (e.g., 1, 30, 999)"
-    echo "  i/info       - Show detailed system information"
-    echo "  q/quit       - Exit installer"
+    echo "  all          - Run all Host Configuration scripts"
+    echo "  <number>     - Run specific script (e.g., 1, 3, 30)"
+    echo "  i/info       - Show system information"
+    echo "  q/quit       - Exit"
     echo ""
 }
 
@@ -387,7 +377,7 @@ show_main_menu() {
 show_system_info() {
     clear
     echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║       System Information             ║${NC}"
+    echo -e "${GREEN}║        System Information            ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     

@@ -405,6 +405,30 @@ pct start $CONTAINER_ID
 sleep 5
 echo -e "${GREEN}✓ Container started${NC}"
 
+# Set root password
+echo ""
+echo -e "${CYAN}Set root password for SSH access:${NC}"
+echo -n "Enter password: "
+read -s ROOT_PASSWORD
+echo ""
+echo -n "Confirm password: "
+read -s ROOT_PASSWORD_CONFIRM
+echo ""
+
+if [ "$ROOT_PASSWORD" != "$ROOT_PASSWORD_CONFIRM" ]; then
+    echo -e "${RED}ERROR: Passwords do not match${NC}"
+    exit 1
+fi
+
+if [ -z "$ROOT_PASSWORD" ]; then
+    echo -e "${RED}ERROR: Password cannot be empty${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}>>> Setting root password...${NC}"
+pct exec $CONTAINER_ID -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
+echo -e "${GREEN}✓ Password set${NC}"
+
 # Verify GPU passthrough inside container
 echo ""
 echo -e "${GREEN}>>> Verifying GPU passthrough...${NC}"

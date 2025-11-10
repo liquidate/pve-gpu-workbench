@@ -96,40 +96,45 @@ if [ -z "$GPU_PCI_PATH" ]; then
 fi
 
 # Find next available container ID
-echo ""
-echo -e "${GREEN}>>> Finding next available container ID...${NC}"
 NEXT_ID=100
 while pct status $NEXT_ID &>/dev/null; do
     ((NEXT_ID++))
 done
-echo -e "${GREEN}✓ Next available ID: $NEXT_ID${NC}"
-echo ""
 
-# Prompt for container ID
-while true; do
-    read -r -p "Enter container ID [$NEXT_ID]: " CONTAINER_ID
-    CONTAINER_ID=${CONTAINER_ID:-$NEXT_ID}
+if [ "$QUICK_MODE" = true ]; then
+    CONTAINER_ID=$NEXT_ID
+else
+    echo ""
+    echo -e "${GREEN}>>> Finding next available container ID...${NC}"
+    echo -e "${GREEN}✓ Next available ID: $NEXT_ID${NC}"
+    echo ""
     
-    # Validate it's a number
-    if ! [[ "$CONTAINER_ID" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Invalid ID: must be a number${NC}"
-        continue
-    fi
-    
-    # Check if already exists
-    if pct status $CONTAINER_ID &>/dev/null; then
-        echo -e "${RED}Container ID $CONTAINER_ID already exists${NC}"
-        read -r -p "Choose a different ID? [Y/n]: " RETRY
-        RETRY=${RETRY:-Y}
-        if [[ "$RETRY" =~ ^[Yy]$ ]]; then
+    # Prompt for container ID
+    while true; do
+        read -r -p "Enter container ID [$NEXT_ID]: " CONTAINER_ID
+        CONTAINER_ID=${CONTAINER_ID:-$NEXT_ID}
+        
+        # Validate it's a number
+        if ! [[ "$CONTAINER_ID" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}Invalid ID: must be a number${NC}"
             continue
-        else
-            exit 1
         fi
-    fi
-    
-    break
-done
+        
+        # Check if already exists
+        if pct status $CONTAINER_ID &>/dev/null; then
+            echo -e "${RED}Container ID $CONTAINER_ID already exists${NC}"
+            read -r -p "Choose a different ID? [Y/n]: " RETRY
+            RETRY=${RETRY:-Y}
+            if [[ "$RETRY" =~ ^[Yy]$ ]]; then
+                continue
+            else
+                exit 1
+            fi
+        fi
+        
+        break
+    done
+fi
 
 # Determine hostname
 BASE_HOSTNAME="ollama"
@@ -145,8 +150,10 @@ fi
 echo -e "${GREEN}✓ Hostname: $HOSTNAME${NC}"
 
 # Detect network configuration
-echo ""
-echo -e "${GREEN}>>> Detecting network configuration...${NC}"
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}>>> Detecting network configuration...${NC}"
+fi
 
 # Get bridge IP and subnet
 BRIDGE_IP=$(ip -4 addr show vmbr0 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
@@ -156,14 +163,16 @@ SUBNET=$(echo "$BRIDGE_IP" | cut -d'.' -f1-3)
 # Get gateway
 GATEWAY=$(ip route show default | grep -oP '(?<=via )\d+\.\d+\.\d+\.\d+' | head -n1)
 
-echo -e "${CYAN}Network detected:${NC}"
-echo "  Bridge (vmbr0): $BRIDGE_IP/$BRIDGE_CIDR"
-echo "  Gateway: $GATEWAY"
-echo "  Subnet: $SUBNET.0/$BRIDGE_CIDR"
-
-# Find available IP
-echo ""
-echo -e "${GREEN}>>> Scanning for available IP addresses...${NC}"
+if [ "$QUICK_MODE" = false ]; then
+    echo -e "${CYAN}Network detected:${NC}"
+    echo "  Bridge (vmbr0): $BRIDGE_IP/$BRIDGE_CIDR"
+    echo "  Gateway: $GATEWAY"
+    echo "  Subnet: $SUBNET.0/$BRIDGE_CIDR"
+    
+    # Find available IP
+    echo ""
+    echo -e "${GREEN}>>> Scanning for available IP addresses...${NC}"
+fi
 SUGGESTED_IP=""
 for i in {100..200}; do
     TEST_IP="${SUBNET}.${i}"
@@ -190,13 +199,16 @@ if [ -z "$SUGGESTED_IP" ]; then
     SUGGESTED_IP="${SUBNET}.100"
 fi
 
-echo -e "${GREEN}✓ Suggested IP: $SUGGESTED_IP${NC}"
-echo ""
-
-# Prompt for IP address
-while true; do
-    read -r -p "Enter IP address for this container [$SUGGESTED_IP]: " IP_ADDRESS
-    IP_ADDRESS=${IP_ADDRESS:-$SUGGESTED_IP}
+if [ "$QUICK_MODE" = true ]; then
+    IP_ADDRESS="$SUGGESTED_IP"
+else
+    echo -e "${GREEN}✓ Suggested IP: $SUGGESTED_IP${NC}"
+    echo ""
+    
+    # Prompt for IP address
+    while true; do
+        read -r -p "Enter IP address for this container [$SUGGESTED_IP]: " IP_ADDRESS
+        IP_ADDRESS=${IP_ADDRESS:-$SUGGESTED_IP}
     
     # Validate IP format
     if [[ ! "$IP_ADDRESS" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
@@ -241,13 +253,15 @@ while true; do
     fi
     
     break
-done
+    done
+fi
 
-# Confirm gateway
-echo ""
-while true; do
-    read -r -p "Gateway address [$GATEWAY]: " GATEWAY_INPUT
-    GATEWAY_INPUT=${GATEWAY_INPUT:-$GATEWAY}
+# Gateway configuration
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    while true; do
+        read -r -p "Gateway address [$GATEWAY]: " GATEWAY_INPUT
+        GATEWAY_INPUT=${GATEWAY_INPUT:-$GATEWAY}
     
     # Validate gateway format
     if [[ ! "$GATEWAY_INPUT" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
@@ -257,13 +271,17 @@ while true; do
     
     GATEWAY="$GATEWAY_INPUT"
     break
-done
+    done
+fi
+# If quick mode, gateway is already set from auto-detection
 
 # Detect available storage
-echo ""
-echo -e "${GREEN}>>> Detecting available storage...${NC}"
-echo ""
-echo -e "${CYAN}Available storage pools:${NC}"
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}>>> Detecting available storage...${NC}"
+    echo ""
+    echo -e "${CYAN}Available storage pools:${NC}"
+fi
 
 declare -a STORAGE_NAMES
 declare -A STORAGE_INFO
@@ -277,9 +295,11 @@ while IFS= read -r line; do
     if [[ "$type" =~ ^(dir|zfspool|lvm|lvmthin|btrfs)$ ]]; then
         STORAGE_NAMES[$INDEX]=$name
         STORAGE_INFO[$name]=$avail
-        # Convert KB to GB for display (pvesm shows KB)
-        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
-        printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
+        if [ "$QUICK_MODE" = false ]; then
+            # Convert KB to GB for display (pvesm shows KB)
+            avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
+            printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
+        fi
         ((INDEX++))
     fi
 done < <(pvesm status | tail -n +2)
@@ -298,21 +318,22 @@ for i in "${!STORAGE_NAMES[@]}"; do
     fi
 done
 
-echo ""
-read -r -p "Select storage pool [${DEFAULT_STORAGE_NUM}]: " STORAGE_CHOICE
-STORAGE_CHOICE=${STORAGE_CHOICE:-$DEFAULT_STORAGE_NUM}
-
-if [ -z "${STORAGE_NAMES[$STORAGE_CHOICE]}" ]; then
-    echo -e "${RED}Invalid storage selection${NC}"
-    exit 1
+if [ "$QUICK_MODE" = true ]; then
+    STORAGE="${STORAGE_NAMES[$DEFAULT_STORAGE_NUM]}"
+else
+    echo ""
+    read -r -p "Select storage pool [${DEFAULT_STORAGE_NUM}]: " STORAGE_CHOICE
+    STORAGE_CHOICE=${STORAGE_CHOICE:-$DEFAULT_STORAGE_NUM}
+    
+    if [ -z "${STORAGE_NAMES[$STORAGE_CHOICE]}" ]; then
+        echo -e "${RED}Invalid storage selection${NC}"
+        exit 1
+    fi
+    
+    STORAGE="${STORAGE_NAMES[$STORAGE_CHOICE]}"
 fi
 
-STORAGE="${STORAGE_NAMES[$STORAGE_CHOICE]}"
-
 # Resource allocation
-echo ""
-echo -e "${GREEN}>>> Resource allocation...${NC}"
-
 # Detect total RAM and GPU VRAM
 TOTAL_RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
 GPU_VRAM_ALLOCATED=0
@@ -328,14 +349,6 @@ if [ $AVAILABLE_RAM -lt 0 ]; then
     AVAILABLE_RAM=$((TOTAL_RAM_GB - 4))
 fi
 
-echo -e "${CYAN}System resources:${NC}"
-echo "  Total RAM: ${TOTAL_RAM_GB}GB"
-if [ $GPU_VRAM_ALLOCATED -gt 0 ]; then
-    echo "  GPU VRAM: ${GPU_VRAM_ALLOCATED}GB"
-fi
-echo "  Available for LXC: ~${AVAILABLE_RAM}GB"
-echo ""
-
 # Smart defaults (designed for Ollama - can run large models)
 DEFAULT_DISK=256
 DEFAULT_MEMORY=16
@@ -350,55 +363,83 @@ if [ $AVAILABLE_RAM -lt 16 ]; then
     DEFAULT_SWAP=4
 fi
 
-read -r -p "Disk size in GB [$DEFAULT_DISK]: " DISK_SIZE
-DISK_SIZE=${DISK_SIZE:-$DEFAULT_DISK}
-
-read -r -p "Memory in GB [$DEFAULT_MEMORY]: " MEMORY
-MEMORY=${MEMORY:-$DEFAULT_MEMORY}
-
-read -r -p "CPU cores [$DEFAULT_CORES]: " CORES
-CORES=${CORES:-$DEFAULT_CORES}
-
-read -r -p "Swap in GB [$DEFAULT_SWAP]: " SWAP
-SWAP=${SWAP:-$DEFAULT_SWAP}
+if [ "$QUICK_MODE" = true ]; then
+    DISK_SIZE=$DEFAULT_DISK
+    MEMORY=$DEFAULT_MEMORY
+    CORES=$DEFAULT_CORES
+    SWAP=$DEFAULT_SWAP
+else
+    echo ""
+    echo -e "${GREEN}>>> Resource allocation...${NC}"
+    echo -e "${CYAN}System resources:${NC}"
+    echo "  Total RAM: ${TOTAL_RAM_GB}GB"
+    if [ $GPU_VRAM_ALLOCATED -gt 0 ]; then
+        echo "  GPU VRAM: ${GPU_VRAM_ALLOCATED}GB"
+    fi
+    echo "  Available for LXC: ~${AVAILABLE_RAM}GB"
+    echo ""
+    
+    read -r -p "Disk size in GB [$DEFAULT_DISK]: " DISK_SIZE
+    DISK_SIZE=${DISK_SIZE:-$DEFAULT_DISK}
+    
+    read -r -p "Memory in GB [$DEFAULT_MEMORY]: " MEMORY
+    MEMORY=${MEMORY:-$DEFAULT_MEMORY}
+    
+    read -r -p "CPU cores [$DEFAULT_CORES]: " CORES
+    CORES=${CORES:-$DEFAULT_CORES}
+    
+    read -r -p "Swap in GB [$DEFAULT_SWAP]: " SWAP
+    SWAP=${SWAP:-$DEFAULT_SWAP}
+fi
 
 # Summary
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Configuration Summary${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-echo -e "${CYAN}Container:${NC}"
-echo "  ID: $CONTAINER_ID"
-echo "  Hostname: $HOSTNAME"
-echo "  IP: $IP_ADDRESS/$BRIDGE_CIDR"
-echo "  Gateway: $GATEWAY"
-echo ""
-echo -e "${CYAN}Resources:${NC}"
-echo "  Storage: $STORAGE"
-echo "  Disk: ${DISK_SIZE}GB"
-echo "  Memory: ${MEMORY}GB"
-echo "  CPU Cores: $CORES"
-echo "  Swap: ${SWAP}GB"
-echo ""
-echo -e "${CYAN}GPU:${NC}"
-echo "  Type: AMD"
-echo "  PCI: $GPU_PCI_PATH"
-echo ""
-echo -e "${CYAN}Software:${NC}"
-echo "  Ollama: Latest version"
-echo "  Auto-start: Yes (systemd service)"
-echo ""
-
-read -r -p "Continue with these settings? [Y/n]: " CONFIRM
-CONFIRM=${CONFIRM:-Y}
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo "Cancelled."
-    exit 0
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Configuration Summary${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${CYAN}Container:${NC}"
+    echo "  ID: $CONTAINER_ID"
+    echo "  Hostname: $HOSTNAME"
+    echo "  IP: $IP_ADDRESS/$BRIDGE_CIDR"
+    echo "  Gateway: $GATEWAY"
+    echo ""
+    echo -e "${CYAN}Resources:${NC}"
+    echo "  Storage: $STORAGE"
+    echo "  Disk: ${DISK_SIZE}GB"
+    echo "  Memory: ${MEMORY}GB"
+    echo "  CPU Cores: $CORES"
+    echo "  Swap: ${SWAP}GB"
+    echo ""
+    echo -e "${CYAN}GPU:${NC}"
+    echo "  Type: AMD"
+    echo "  PCI: $GPU_PCI_PATH"
+    echo ""
+    echo -e "${CYAN}Software:${NC}"
+    echo "  Ollama: Latest version"
+    echo "  Auto-start: Yes (systemd service)"
+    echo ""
+    
+    read -r -p "Continue with these settings? [Y/n]: " CONFIRM
+    CONFIRM=${CONFIRM:-Y}
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
 fi
 
 # Create LXC container
-echo ""
+if [ "$QUICK_MODE" = true ]; then
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}Creating Ollama Container${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "  Container ID: $CONTAINER_ID"
+    echo "  IP Address: $IP_ADDRESS"
+    echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
+    echo ""
+fi
 echo -e "${GREEN}>>> Creating LXC container...${NC}"
 
 pct create $CONTAINER_ID \

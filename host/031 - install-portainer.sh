@@ -51,8 +51,8 @@ if pct exec $CONTAINER_ID -- docker ps -a --format '{{.Names}}' | grep -q '^port
         echo ""
         echo -e "${GREEN}Portainer is already installed.${NC}"
         
-        # Get container IP
-        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+        # Get container IP from net0 config line
+        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
         
         echo ""
         echo -e "${GREEN}Access Portainer at:${NC}"
@@ -94,8 +94,8 @@ else
     exit 1
 fi
 
-# Get container IP
-CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+# Get container IP from net0 config line
+CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
 
 echo ""
 echo -e "${GREEN}==========================================${NC}"

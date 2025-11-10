@@ -54,7 +54,7 @@ pct exec $CONTAINER_ID -- chmod +x /root/proxmox-setup-scripts/lxc/install-ollam
 pct exec $CONTAINER_ID -- bash /root/proxmox-setup-scripts/lxc/install-ollama.sh
 
 # Get container IP
-CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
 
 echo ""
 echo -e "${GREEN}==========================================${NC}"

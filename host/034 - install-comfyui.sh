@@ -58,7 +58,7 @@ if pct exec $CONTAINER_ID -- docker ps -a --format '{{.Names}}' | grep -q '^comf
         pct exec $CONTAINER_ID -- docker stop comfyui 2>/dev/null || true
         pct exec $CONTAINER_ID -- docker rm comfyui 2>/dev/null || true
     else
-        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
         echo ""
         echo -e "${GREEN}ComfyUI already installed.${NC}"
         echo ""
@@ -108,7 +108,7 @@ else
 fi
 
 # Get container IP
-CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
 
 echo ""
 echo -e "${GREEN}==========================================${NC}"

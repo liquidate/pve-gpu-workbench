@@ -40,11 +40,15 @@ echo ""
 echo -e "${GREEN}>>> Checking for Ollama...${NC}"
 OLLAMA_INSTALLED=false
 
-if pct exec $CONTAINER_ID -- command -v ollama >/dev/null 2>&1; then
+# Check for native Ollama in common locations
+if pct exec $CONTAINER_ID -- test -f /usr/local/bin/ollama 2>/dev/null || \
+   pct exec $CONTAINER_ID -- test -f /usr/bin/ollama 2>/dev/null || \
+   pct exec $CONTAINER_ID -- systemctl is-active --quiet ollama 2>/dev/null; then
     OLLAMA_INSTALLED=true
     OLLAMA_URL="http://localhost:11434"
     echo -e "${GREEN}✓ Ollama installed natively${NC}"
-elif pct exec $CONTAINER_ID -- docker ps --format '{{.Names}}' | grep -q '^ollama$'; then
+# Check for Docker Ollama
+elif pct exec $CONTAINER_ID -- docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^ollama$'; then
     OLLAMA_INSTALLED=true
     OLLAMA_URL="http://ollama:11434"
     echo -e "${GREEN}✓ Ollama running in Docker${NC}"
@@ -92,7 +96,7 @@ if pct exec $CONTAINER_ID -- docker ps -a --format '{{.Names}}' | grep -q '^open
         pct exec $CONTAINER_ID -- docker rm open-webui 2>/dev/null || true
         pct exec $CONTAINER_ID -- docker volume rm open-webui 2>/dev/null || true
     else
-        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+        CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
         echo ""
         echo -e "${GREEN}Open WebUI already installed.${NC}"
         echo ""
@@ -143,7 +147,7 @@ else
 fi
 
 # Get container IP
-CONTAINER_IP=$(pct config $CONTAINER_ID | grep "ip=" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -n1)
+CONTAINER_IP=$(pct config $CONTAINER_ID | grep "^net0:" | grep -oP 'ip=\K[\d\.]+' | head -n1)
 
 echo ""
 echo -e "${GREEN}==========================================${NC}"

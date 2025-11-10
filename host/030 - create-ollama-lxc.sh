@@ -463,8 +463,18 @@ pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1
 pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1
 echo -e "${GREEN}✓ System packages updated${NC}"
 
-echo -e "${GREEN}>>> Installing dependencies (curl)...${NC}"
-pct exec $CONTAINER_ID -- apt install -y curl >/dev/null 2>&1
+echo -e "${GREEN}>>> Installing dependencies...${NC}"
+pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >/dev/null 2>&1
+
+echo -e "${GREEN}>>> Installing ROCm utilities...${NC}"
+pct exec $CONTAINER_ID -- bash -c "
+    mkdir -p --mode=0755 /etc/apt/keyrings
+    wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
+    echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
+    apt update -qq 2>&1 | grep -v 'packages can be upgraded' || true
+    apt install -y rocm-smi radeontop 2>&1 | grep -v 'Setting up' | grep -v 'Unpacking' | grep -v 'Preparing' || true
+" >/dev/null 2>&1
+echo -e "${GREEN}✓ ROCm utilities installed${NC}"
 
 echo -e "${GREEN}>>> Installing Ollama...${NC}"
 pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" 2>&1 | grep -E "Downloading|###|GPU ready|Install complete" || true

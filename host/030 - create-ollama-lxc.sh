@@ -215,8 +215,8 @@ while IFS= read -r line; do
     if [[ "$type" =~ ^(dir|zfspool|lvm|lvmthin|btrfs)$ ]]; then
         STORAGE_NAMES[$INDEX]=$name
         STORAGE_INFO[$name]=$avail
-        # Convert to GB for display (pvesm shows bytes)
-        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024 / 1024}")
+        # Convert KB to GB for display (pvesm shows KB)
+        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
         printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
         ((INDEX++))
     fi

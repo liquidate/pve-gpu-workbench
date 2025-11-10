@@ -436,12 +436,22 @@ echo -e "${GREEN}>>> Installing Ollama...${NC}"
 pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
 
 echo ""
+echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
+# Create systemd override to set OLLAMA_HOST
+pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
+pct exec $CONTAINER_ID -- bash -c "cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
+[Service]
+Environment=\"OLLAMA_HOST=0.0.0.0:11434\"
+EOF"
+
+echo ""
 echo -e "${GREEN}>>> Starting Ollama service...${NC}"
+pct exec $CONTAINER_ID -- systemctl daemon-reload
 pct exec $CONTAINER_ID -- systemctl enable ollama 2>/dev/null || true
 pct exec $CONTAINER_ID -- systemctl start ollama 2>/dev/null || true
 sleep 3
 
-echo -e "${GREEN}✓ Ollama installed and running${NC}"
+echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

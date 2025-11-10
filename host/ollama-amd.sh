@@ -530,6 +530,76 @@ sleep 3
 
 echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"
 
+# Create update command inside the container
+echo ""
+echo -e "${GREEN}>>> Creating update command in container...${NC}"
+pct exec $CONTAINER_ID -- bash -c 'cat > /usr/local/bin/update << '\''UPDATEEOF'\''
+#!/usr/bin/env bash
+#
+# Update Ollama to the latest version
+#
+
+set -e
+
+GREEN='\''\033[0;32m'\''
+YELLOW='\''\033[1;33m'\''
+CYAN='\''\033[0;36m'\''
+NC='\''\033[0m'\''
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║      Ollama Update                   ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo ""
+
+# Show current version
+if command -v ollama &>/dev/null; then
+    CURRENT_VERSION=$(ollama --version 2>/dev/null | grep -oP '\''ollama version is \K[0-9.]+'\'' || echo "unknown")
+    echo -e "${CYAN}Current Ollama version:${NC} $CURRENT_VERSION"
+else
+    echo -e "${YELLOW}Ollama not found${NC}"
+    CURRENT_VERSION="not installed"
+fi
+
+echo ""
+read -p "Update Ollama to the latest version? [Y/n]: " UPDATE
+UPDATE=${UPDATE:-Y}
+
+if [[ ! "$UPDATE" =~ ^[Yy]$ ]]; then
+    echo "Update cancelled."
+    exit 0
+fi
+
+echo ""
+echo -e "${CYAN}>>> Downloading and installing latest Ollama...${NC}"
+curl -fsSL https://ollama.com/install.sh | sh
+
+echo ""
+echo -e "${CYAN}>>> Restarting Ollama service...${NC}"
+systemctl restart ollama
+
+# Wait a moment for service to start
+sleep 2
+
+if systemctl is-active --quiet ollama; then
+    NEW_VERSION=$(ollama --version 2>/dev/null | grep -oP '\''ollama version is \K[0-9.]+'\'' || echo "unknown")
+    echo ""
+    echo -e "${GREEN}✓ Ollama updated successfully!${NC}"
+    if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+        echo -e "${CYAN}Version:${NC} $CURRENT_VERSION → $NEW_VERSION"
+    else
+        echo -e "${CYAN}Already on latest version:${NC} $NEW_VERSION"
+    fi
+    echo ""
+else
+    echo -e "${YELLOW}⚠  Service may need manual restart${NC}"
+    exit 1
+fi
+UPDATEEOF
+chmod +x /usr/local/bin/update'
+
+echo -e "${GREEN}✓ Update command created${NC}"
+
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}                 🎉  Ollama LXC Complete!${NC}"
@@ -568,9 +638,9 @@ echo -e "   ${GREEN}https://community-scripts.github.io/ProxmoxVE/scripts?id=ope
 echo ""
 echo -e "   Then configure it to connect to: ${GREEN}http://$IP_ADDRESS:11434${NC}"
 echo ""
-echo -e "${CYAN}🔄 Update Ollama:${NC}"
+echo -e "${CYAN}🔄 Update Ollama (when new versions are released):${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
-echo -e "   ${GREEN}curl -fsSL https://ollama.com/install.sh | sh && systemctl restart ollama${NC}"
+echo -e "   ${GREEN}update${NC}"
 echo ""
 echo -e "${CYAN}📊 Alternative GPU Monitor:${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"

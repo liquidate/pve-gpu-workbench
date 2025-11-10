@@ -112,10 +112,12 @@ if [ "$VERBOSE" = "1" ]; then
     apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
     echo -e "${GREEN}✓ System packages updated${NC}"
 else
-    apt update $QUIET_APT >/dev/null 2>&1 &
-    show_progress $! "Updating package cache"
-    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1 &
-    show_progress $! "Upgrading system packages"
+    echo -e "${GREEN}>>> Updating package cache...${NC}"
+    apt update $QUIET_APT >/dev/null 2>&1
+    echo -e "${GREEN}✓ Package cache updated${NC}"
+    echo -e "${GREEN}>>> Upgrading system packages...${NC}"
+    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1
+    echo -e "${GREEN}✓ System packages upgraded${NC}"
 fi
 
 # Install Docker prerequisites
@@ -232,8 +234,9 @@ if [ "$VERBOSE" = "1" ]; then
     apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
     echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 else
-    apt install -y $QUIET_APT rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils >/dev/null 2>&1 &
-    show_progress $! "Installing AMD ROCm libraries [2-3 min]"
+    echo -e "${GREEN}>>> Installing AMD ROCm libraries [2-3 min]...${NC}"
+    apt install -y $QUIET_APT rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils >/dev/null 2>&1
+    echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 fi
 
 # Install ROCm development packages (needed for Ollama Docker to compile if needed)
@@ -242,8 +245,9 @@ if [ "$VERBOSE" = "1" ]; then
     apt install -y rocm-core rocm-dev hipcc
     echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 else
-    apt install -y $QUIET_APT rocm-core rocm-dev hipcc >/dev/null 2>&1 &
-    show_progress $! "Installing ROCm development packages [1-2 min]"
+    echo -e "${GREEN}>>> Installing ROCm development packages [1-2 min]...${NC}"
+    apt install -y $QUIET_APT rocm-core rocm-dev hipcc >/dev/null 2>&1
+    echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 fi
 
 # Install monitoring tools
@@ -252,8 +256,9 @@ if [ "$VERBOSE" = "1" ]; then
     apt install -y nvtop radeontop
     echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 else
-    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1 &
-    show_progress $! "Installing monitoring tools"
+    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
+    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1
+    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 fi
 
 # Add root user to render and video groups (critical for GPU access)

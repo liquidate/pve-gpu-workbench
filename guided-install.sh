@@ -179,14 +179,11 @@ display_script() {
     description=$(get_script_description "$script_num")
     status=$(get_script_status "$script_num")
     
-    # Truncate description if too long
-    if [ ${#description} -gt 60 ]; then
-        description="${description:0:57}..."
-    fi
-    
-    # Format status with color
+    # Format status with color (but calculate length without color codes)
     local status_display=""
+    local status_plain=""
     if [ -n "$status" ]; then
+        status_plain="[$status]"
         case "$status" in
             "INSTALLED"|"CONFIGURED"|"ENABLED")
                 status_display="${GREEN}[$status]${NC}"
@@ -206,8 +203,24 @@ display_script() {
         esac
     fi
     
-    # Use echo -e to properly render colors, with padding
-    echo -e "  ${BOLD}${script_num}${NC} - ${description} ${status_display}"
+    # Calculate padding for right-aligned status
+    # Total width: 68 chars (fits standard 80-char terminals with margin)
+    local line_width=68
+    local prefix_len=8  # "  001 - "
+    local status_len=${#status_plain}
+    local desc_max_len=$((line_width - prefix_len - status_len - 1))  # -1 for space before status
+    
+    # Truncate description if needed
+    if [ ${#description} -gt $desc_max_len ]; then
+        description="${description:0:$((desc_max_len - 3))}..."
+    fi
+    
+    # Calculate padding
+    local padding_len=$((desc_max_len - ${#description}))
+    local padding=$(printf "%${padding_len}s" "")
+    
+    # Display with right-aligned status
+    echo -e "  ${BOLD}${script_num}${NC} - ${description}${padding} ${status_display}"
 }
 
 # Function to run a script
@@ -286,9 +299,9 @@ detect_gpus() {
 # Main menu
 show_main_menu() {
     clear
-    echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  Proxmox Setup - Guided Installer     ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║   Proxmox Setup - Guided Installer  ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     
     # Show detected GPU info
@@ -373,9 +386,9 @@ show_main_menu() {
 # Function to show detailed system information
 show_system_info() {
     clear
-    echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║      System Information                ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║       System Information             ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     
     # GPU Information

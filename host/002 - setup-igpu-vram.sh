@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Setup AMD Ryzen AI 300 / AI PRO 300 Processors iGPU 96GB VRAM allocation
+# SCRIPT_DESC: Setup AMD iGPU 96GB VRAM allocation
 # SCRIPT_DETECT: grep -q "amdgpu.gttsize=98304" /proc/cmdline 2>/dev/null
 
 echo ">>> Setting iGPU VRAM to 96GB and related block/pages parameters in kernel cmdline"

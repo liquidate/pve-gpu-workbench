@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Install essential tools (curl, git, gpg, htop, iperf3, lshw, mc, s-tui, unzip, wget) and customize bash prompt
+# SCRIPT_DESC: Install essential tools and utilities
 # SCRIPT_DETECT: command -v htop &>/dev/null && command -v mc &>/dev/null
 
 apt update

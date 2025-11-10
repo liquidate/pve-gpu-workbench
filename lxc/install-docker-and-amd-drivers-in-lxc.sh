@@ -24,23 +24,24 @@ show_progress() {
     local pid=$1
     local message=$2
     
-    # Check if running in interactive terminal
-    if [ -t 1 ]; then
+    # Check if running in interactive terminal and verbose mode is off
+    if [ "$VERBOSE" = "1" ] || [ ! -t 1 ]; then
+        # Non-interactive or verbose - just show message and wait
+        echo -e "${GREEN}>>> ${message}...${NC}"
+        wait $pid
+        echo -e "${GREEN}✓ ${message}${NC}"
+    else
         # Interactive - show spinner
         local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
         local i=0
         
+        echo -n "${GREEN}${message} "
         while kill -0 $pid 2>/dev/null; do
             i=$(( (i+1) %10 ))
-            printf "\r${GREEN}${message} ${spin:$i:1}${NC}"
+            printf "\b${spin:$i:1}"
             sleep 0.1
         done
-        printf "\r${GREEN}✓ ${message}${NC}\n"
-    else
-        # Non-interactive - just show message and wait
-        echo -e "${GREEN}>>> ${message}...${NC}"
-        wait $pid
-        echo -e "${GREEN}✓ ${message}${NC}"
+        printf "\b✓${NC}\n"
     fi
 }
 

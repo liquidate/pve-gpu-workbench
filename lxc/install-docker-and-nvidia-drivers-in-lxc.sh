@@ -269,6 +269,18 @@ sleep 2
 echo -e "${GREEN}>>> Docker and NVIDIA Container Toolkit configuration complete${NC}"
 echo ""
 
+# Install monitoring tools
+if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
+    apt install -y nvtop btop htop
+    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+else
+    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
+    apt install -y $QUIET_APT nvtop btop htop >/dev/null 2>&1
+    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
+fi
+echo ""
+
 # Verify installation
 echo ""
 echo -e "${GREEN}==========================================${NC}"

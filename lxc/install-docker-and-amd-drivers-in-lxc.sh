@@ -253,11 +253,11 @@ fi
 # Install monitoring tools
 if [ "$VERBOSE" = "1" ]; then
     echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y nvtop radeontop
+    apt install -y nvtop radeontop btop htop
     echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 else
     echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
-    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1
+    apt install -y $QUIET_APT nvtop radeontop btop htop >/dev/null 2>&1
     echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 fi
 
@@ -300,11 +300,11 @@ echo -e "${GREEN}==========================================${NC}"
 echo ""
 
 # Check if tools are installed
-if ! which rocm-smi rocminfo nvtop radeontop >/dev/null 2>&1; then
-    echo -e "${RED}ERROR: ROCm tools not found in PATH${NC}"
+if ! which rocm-smi rocminfo nvtop radeontop btop htop >/dev/null 2>&1; then
+    echo -e "${RED}ERROR: Required tools not found in PATH${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ ROCm tools installed${NC}"
+echo -e "${GREEN}✓ ROCm and monitoring tools installed${NC}"
 
 # Verify devices are accessible
 if [ ! -e /dev/kfd ]; then
@@ -406,17 +406,20 @@ echo -e "${GREEN}==========================================${NC}"
 echo ""
 echo -e "${GREEN}Your LXC container is now ready to use AMD GPUs in Docker containers.${NC}"
 echo ""
-echo -e "${YELLOW}=== GPU Monitoring Commands ===${NC}"
+echo -e "${YELLOW}=== Monitoring Tools ===${NC}"
 echo ""
-echo -e "${GREEN}Monitor GPU usage in real-time:${NC}"
-echo "  watch -n 0.5 rocm-smi --showuse --showmemuse"
+echo -e "${GREEN}GPU Monitoring:${NC}"
+echo "  nvtop                                   # GPU monitor (AMD/NVIDIA)"
+echo "  radeontop                               # AMD-specific GPU monitor"
+echo "  watch -n 0.5 rocm-smi --showuse --showmemuse  # Real-time GPU stats"
 echo ""
-echo -e "${GREEN}Show detailed GPU info:${NC}"
-echo "  rocm-smi --showproductname --showhw"
-echo "  rocminfo | grep -A 10 'Agent 2'"
+echo -e "${GREEN}System Monitoring:${NC}"
+echo "  btop                                    # Modern resource monitor (best)"
+echo "  htop                                    # Classic process monitor"
 echo ""
-echo -e "${GREEN}Monitor GPU usage with htop-like interface:${NC}"
-echo "  nvtop    # Press F2 to configure, Q to quit"
+echo -e "${GREEN}GPU Information:${NC}"
+echo "  rocm-smi --showproductname --showhw     # GPU details"
+echo "  rocminfo | grep -A 10 'Agent 2'         # ROCm agent info"
 echo ""
 echo -e "${YELLOW}=== Next Steps ===${NC}"
 echo ""

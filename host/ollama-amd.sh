@@ -596,6 +596,21 @@ else
     CURRENT_VERSION="not installed"
 fi
 
+# Fetch latest version from GitHub
+echo -e "${CYAN}Checking for updates...${NC}"
+LATEST_VERSION=$(curl -s https://api.github.com/repos/ollama/ollama/releases/latest | grep -oP '\''"tag_name": "v\K[0-9.]+'\'' 2>/dev/null || echo "unknown")
+
+if [ "$LATEST_VERSION" = "unknown" ]; then
+    echo -e "${YELLOW}Could not fetch latest version. Proceeding anyway...${NC}"
+elif [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
+    echo ""
+    echo -e "${GREEN}✓ Already on latest version: $CURRENT_VERSION${NC}"
+    echo ""
+    exit 0
+else
+    echo -e "${YELLOW}Update available: $CURRENT_VERSION → $LATEST_VERSION${NC}"
+fi
+
 echo ""
 read -p "Update Ollama to the latest version? [Y/n]: " UPDATE
 UPDATE=${UPDATE:-Y}
@@ -606,7 +621,7 @@ if [[ ! "$UPDATE" =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
-echo -e "${CYAN}>>> Downloading and installing latest Ollama...${NC}"
+echo -e "${CYAN}>>> Downloading and installing Ollama $LATEST_VERSION...${NC}"
 curl -fsSL https://ollama.com/install.sh | sh
 
 echo ""

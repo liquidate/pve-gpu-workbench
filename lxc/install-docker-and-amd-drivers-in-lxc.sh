@@ -19,6 +19,21 @@ else
     QUIET_APT="-qq"
 fi
 
+# Progress spinner function
+show_progress() {
+    local pid=$1
+    local message=$2
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    
+    while kill -0 $pid 2>/dev/null; do
+        i=$(( (i+1) %10 ))
+        printf "\r${GREEN}${message} ${spin:$i:1}${NC}"
+        sleep 0.1
+    done
+    printf "\r${GREEN}✓ ${message}${NC}\n"
+}
+
 # Get script directory and source colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -65,15 +80,17 @@ echo -e "${GREEN}>>> Removing old Docker packages...${NC}"
 apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || true
 
 # Update package list and upgrade existing packages
-echo -e "${GREEN}>>> Updating system packages...${NC}"
 if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Updating system packages...${NC}"
     apt update
     apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+    echo -e "${GREEN}✓ System packages updated${NC}"
 else
-    apt update $QUIET_APT >/dev/null 2>&1
-    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" 2>&1 | grep -v "^Selecting\|^Preparing\|^Unpacking\|^Setting up\|^Processing" || true
+    apt update $QUIET_APT >/dev/null 2>&1 &
+    show_progress $! "Updating package cache"
+    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1 &
+    show_progress $! "Upgrading system packages"
 fi
-echo -e "${GREEN}✓ System packages updated${NC}"
 
 # Install Docker prerequisites
 echo -e "${GREEN}>>> Installing Docker prerequisites...${NC}"
@@ -170,33 +187,36 @@ fi
 
 # Install AMD libraries (user-space only, NO kernel modules)
 # Note: We install the latest available version, but it must match the host driver
-echo -e "${GREEN}>>> Installing AMD ROCm libraries (this may take a few minutes)...${NC}"
 
 # Install ROCm 7.1.0 (runtime libraries without DKMS)
 if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Installing AMD ROCm libraries...${NC}"
     apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
+    echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 else
-    apt install -y $QUIET_APT rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils 2>&1 | grep -E "^E:|^Err:" || true
+    apt install -y $QUIET_APT rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils >/dev/null 2>&1 &
+    show_progress $! "Installing AMD ROCm libraries [2-3 min]"
 fi
-echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 
 # Install ROCm development packages (needed for Ollama Docker to compile if needed)
-echo -e "${GREEN}>>> Installing ROCm development packages...${NC}"
 if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Installing ROCm development packages...${NC}"
     apt install -y rocm-core rocm-dev hipcc
+    echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 else
-    apt install -y $QUIET_APT rocm-core rocm-dev hipcc >/dev/null 2>&1
+    apt install -y $QUIET_APT rocm-core rocm-dev hipcc >/dev/null 2>&1 &
+    show_progress $! "Installing ROCm development packages [1-2 min]"
 fi
-echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 
 # Install monitoring tools
-echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
 if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
     apt install -y nvtop radeontop
+    echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 else
-    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1
+    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1 &
+    show_progress $! "Installing monitoring tools"
 fi
-echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 
 # Add root user to render and video groups (critical for GPU access)
 usermod -a -G render,video root

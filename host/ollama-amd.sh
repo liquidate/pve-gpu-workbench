@@ -51,6 +51,9 @@ echo ""
 QUICK_MODE=false
 LOG_FILE="/tmp/ollama-lxc-install-$(date +%Y%m%d-%H%M%S).log"
 
+# Initialize log file for both modes
+echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
+
 if [ "$SETUP_MODE" = "1" ]; then
     QUICK_MODE=true
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -68,28 +71,19 @@ if [ "$SETUP_MODE" = "1" ]; then
         echo "Switching to Advanced mode..."
         QUICK_MODE=false
         echo ""
-    else
-        echo ""
-        echo -e "${CYAN}Installation log: $LOG_FILE${NC}"
-        echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
-        echo ""
     fi
 fi
 
-# Progress indicator function for Quick Mode
+# Progress indicator functions - used in both Quick and Advanced modes
 show_progress() {
     local step=$1
     local total=$2
     local message=$3
-    if [ "$QUICK_MODE" = true ]; then
-        echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
-    fi
+    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
 }
 
 complete_progress() {
-    if [ "$QUICK_MODE" = true ]; then
-        echo -e "\r\033[K${GREEN}✓${NC} $1"
-    fi
+    echo -e "\r\033[K${GREEN}✓${NC} $1"
 }
 
 # Detect GPU PCI address
@@ -452,19 +446,16 @@ fi
 # Create LXC container
 TOTAL_STEPS=8
 
-if [ "$QUICK_MODE" = true ]; then
-    clear
-    echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}Installing Ollama LXC Container${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo "  Container ID: $CONTAINER_ID | IP: $IP_ADDRESS"
-    echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
-    echo ""
-    show_progress 1 $TOTAL_STEPS "Creating container"
-else
-    echo -e "${GREEN}>>> Creating LXC container...${NC}"
-fi
+# Clear screen and show header for installation phase
+clear
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}Installing Ollama LXC Container${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "  Container ID: $CONTAINER_ID | IP: $IP_ADDRESS"
+echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
+echo ""
+show_progress 1 $TOTAL_STEPS "Creating container"
 
 {
     pct create $CONTAINER_ID \
@@ -481,14 +472,8 @@ fi
         --start 0
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "Container created"
-    show_progress 2 $TOTAL_STEPS "Configuring GPU passthrough"
-else
-    echo -e "${GREEN}✓ Container created${NC}"
-    echo ""
-    echo -e "${GREEN}>>> Configuring GPU passthrough...${NC}"
-fi
+complete_progress "Container created"
+show_progress 2 $TOTAL_STEPS "Configuring GPU passthrough"
 
 # Configure GPU passthrough
 
@@ -505,30 +490,17 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file 0 0
 EOF
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "GPU passthrough configured"
-    show_progress 3 $TOTAL_STEPS "Starting container"
-else
-    echo -e "${GREEN}✓ GPU passthrough configured${NC}"
-    echo ""
-    echo -e "${GREEN}>>> Starting container...${NC}"
-fi
+complete_progress "GPU passthrough configured"
+show_progress 3 $TOTAL_STEPS "Starting container"
 
 # Start container
 pct start $CONTAINER_ID >> "$LOG_FILE" 2>&1
 sleep 5
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "Container started"
-else
-    echo -e "${GREEN}✓ Container started${NC}"
-fi
+complete_progress "Container started"
 
 # Set root password
-if [ "$QUICK_MODE" = false ]; then
-    echo ""
-fi
-
+echo ""
 echo ""
 echo -e "${CYAN}Set root password for SSH access:${NC}"
 echo -n "Enter password: "
@@ -548,12 +520,8 @@ if [ -z "$ROOT_PASSWORD" ]; then
     exit 1
 fi
 
-if [ "$QUICK_MODE" = true ]; then
-    echo ""
-    show_progress 4 $TOTAL_STEPS "Setting password and SSH"
-else
-    echo -e "${GREEN}>>> Setting root password...${NC}"
-fi
+echo ""
+show_progress 4 $TOTAL_STEPS "Setting password and SSH"
 
 {
     pct exec $CONTAINER_ID -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
@@ -564,24 +532,14 @@ fi
     pct exec $CONTAINER_ID -- systemctl restart ssh
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "Password and SSH configured"
-    show_progress 5 $TOTAL_STEPS "Verifying GPU passthrough"
-else
-    echo -e "${GREEN}✓ Password set and SSH configured${NC}"
-    echo ""
-    echo -e "${GREEN}>>> Verifying GPU passthrough...${NC}"
-fi
+complete_progress "Password and SSH configured"
+show_progress 5 $TOTAL_STEPS "Verifying GPU passthrough"
 
 # Verify GPU passthrough inside container
 if pct exec $CONTAINER_ID -- test -e /dev/dri/card0 && \
    pct exec $CONTAINER_ID -- test -e /dev/dri/renderD128 && \
    pct exec $CONTAINER_ID -- test -e /dev/kfd; then
-    if [ "$QUICK_MODE" = true ]; then
-        complete_progress "GPU passthrough verified"
-    else
-        echo -e "${GREEN}✓ GPU devices accessible inside container${NC}"
-    fi
+    complete_progress "GPU passthrough verified"
 else
     echo -e "${RED}ERROR: GPU devices not accessible inside container${NC}"
     echo "Troubleshooting:"
@@ -591,19 +549,7 @@ else
 fi
 
 # Install Ollama
-if [ "$QUICK_MODE" = false ]; then
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}Installing Ollama${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-fi
-
-if [ "$QUICK_MODE" = true ]; then
-    show_progress 6 $TOTAL_STEPS "Updating system packages"
-else
-    echo -e "${GREEN}>>> Updating package list...${NC}"
-fi
+show_progress 6 $TOTAL_STEPS "Updating system packages"
 
 {
     pct exec $CONTAINER_ID -- apt update -qq
@@ -616,17 +562,8 @@ fi
     fi
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "System packages updated ($PACKAGE_COUNT packages)"
-    show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
-else
-    if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        echo -e "${GREEN}✓ System packages updated${NC}"
-    else
-        echo -e "${GREEN}✓ All packages up to date${NC}"
-    fi
-    echo -e "${GREEN}>>> Installing dependencies...${NC}"
-fi
+complete_progress "System packages updated ($PACKAGE_COUNT packages)"
+show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
 
 {
     pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
@@ -644,15 +581,8 @@ fi
     pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "Ollama and ROCm utilities installed"
-    show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
-else
-    echo -e "${GREEN}✓ ROCm utilities installed${NC}"
-    echo -e "${GREEN}>>> Installing Ollama...${NC}"
-    echo ""
-    echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
-fi
+complete_progress "Ollama and ROCm utilities installed"
+show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
 {
     # Create systemd override to set OLLAMA_HOST
     pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
@@ -667,15 +597,7 @@ EOFMARKER'
     sleep 3
 } >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = true ]; then
-    complete_progress "Ollama configured and running"
-else
-    echo ""
-    echo -e "${GREEN}>>> Restarting Ollama with new configuration...${NC}"
-    echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"
-    echo ""
-    echo -e "${GREEN}>>> Creating update command in container...${NC}"
-fi
+complete_progress "Ollama configured and running"
 
 # Create update command inside the container
 pct exec $CONTAINER_ID -- bash -c 'cat > /usr/local/bin/update << '\''UPDATEEOF'\''
@@ -758,15 +680,9 @@ fi
 UPDATEEOF
 chmod +x /usr/local/bin/update' >> "$LOG_FILE" 2>&1
 
-if [ "$QUICK_MODE" = false ]; then
-    echo -e "${GREEN}✓ Update command created${NC}"
-fi
-
 # Clear screen and show completion message
-if [ "$QUICK_MODE" = true ]; then
-    clear
-    echo ""
-fi
+clear
+echo ""
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -778,11 +694,8 @@ echo -e "   Hostname:     ${GREEN}$HOSTNAME${NC}"
 echo -e "   IP Address:   ${GREEN}$IP_ADDRESS${NC}"
 echo -e "   Container ID: ${GREEN}$CONTAINER_ID${NC}"
 echo -e "   Ollama API:   ${GREEN}http://$IP_ADDRESS:11434${NC}"
-
-if [ "$QUICK_MODE" = true ]; then
-    echo ""
-    echo -e "${CYAN}📄 Installation Log:${NC} ${GREEN}$LOG_FILE${NC}"
-fi
+echo ""
+echo -e "${CYAN}📄 Installation Log:${NC} ${GREEN}$LOG_FILE${NC}"
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

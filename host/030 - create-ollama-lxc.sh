@@ -215,7 +215,9 @@ while IFS= read -r line; do
     if [[ "$type" =~ ^(dir|zfspool|lvm|lvmthin|btrfs)$ ]]; then
         STORAGE_NAMES[$INDEX]=$name
         STORAGE_INFO[$name]=$avail
-        printf "  [%d] %-20s %10s available\n" "$INDEX" "$name" "$avail"
+        # Convert to GB for display (pvesm shows bytes)
+        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024 / 1024}")
+        printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
         ((INDEX++))
     fi
 done < <(pvesm status | tail -n +2)
@@ -272,17 +274,18 @@ fi
 echo "  Available for LXC: ~${AVAILABLE_RAM}GB"
 echo ""
 
-# Smart defaults
-DEFAULT_DISK=128
+# Smart defaults (designed for Ollama - can run large models)
+DEFAULT_DISK=256
 DEFAULT_MEMORY=16
-DEFAULT_CORES=8
-DEFAULT_SWAP=4
+DEFAULT_CORES=12
+DEFAULT_SWAP=8
 
 # Adjust defaults based on available RAM
 if [ $AVAILABLE_RAM -lt 16 ]; then
+    DEFAULT_DISK=128
     DEFAULT_MEMORY=8
-    DEFAULT_CORES=4
-    DEFAULT_SWAP=2
+    DEFAULT_CORES=6
+    DEFAULT_SWAP=4
 fi
 
 read -r -p "Disk size in GB [$DEFAULT_DISK]: " DISK_SIZE

@@ -117,7 +117,9 @@ ensure_container_running() {
 check_docker_installed() {
     local container_id=$1
     
-    if ! pct exec $container_id -- command -v docker >/dev/null 2>&1; then
+    # Check if docker binary exists (more reliable than 'command -v' through pct exec)
+    if ! pct exec $container_id -- test -f /usr/bin/docker 2>/dev/null && \
+       ! pct exec $container_id -- test -f /usr/local/bin/docker 2>/dev/null; then
         echo -e "${RED}ERROR: Docker not installed in container $container_id${NC}"
         echo ""
         echo "This container needs Docker. Options:"

@@ -49,6 +49,8 @@ SETUP_MODE=${SETUP_MODE:-1}
 echo ""
 
 QUICK_MODE=false
+LOG_FILE="/tmp/ollama-lxc-install-$(date +%Y%m%d-%H%M%S).log"
+
 if [ "$SETUP_MODE" = "1" ]; then
     QUICK_MODE=true
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -68,9 +70,27 @@ if [ "$SETUP_MODE" = "1" ]; then
         echo ""
     else
         echo ""
-        echo -e "${GREEN}>>> Setting up container with defaults...${NC}"
+        echo -e "${CYAN}Installation log: $LOG_FILE${NC}"
+        echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
+        echo ""
     fi
 fi
+
+# Progress indicator function for Quick Mode
+show_progress() {
+    local step=$1
+    local total=$2
+    local message=$3
+    if [ "$QUICK_MODE" = true ]; then
+        echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
+    fi
+}
+
+complete_progress() {
+    if [ "$QUICK_MODE" = true ]; then
+        echo -e "\r\033[K${GREEN}✓${NC} $1"
+    fi
+}
 
 # Detect GPU PCI address
 if [ "$QUICK_MODE" = false ]; then
@@ -430,39 +450,51 @@ if [ "$QUICK_MODE" = false ]; then
 fi
 
 # Create LXC container
+TOTAL_STEPS=8
+
 if [ "$QUICK_MODE" = true ]; then
+    clear
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}Creating Ollama Container${NC}"
+    echo -e "${GREEN}Installing Ollama LXC Container${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo "  Container ID: $CONTAINER_ID"
-    echo "  IP Address: $IP_ADDRESS"
+    echo "  Container ID: $CONTAINER_ID | IP: $IP_ADDRESS"
     echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
     echo ""
+    show_progress 1 $TOTAL_STEPS "Creating container"
+else
+    echo -e "${GREEN}>>> Creating LXC container...${NC}"
 fi
-echo -e "${GREEN}>>> Creating LXC container...${NC}"
 
-pct create $CONTAINER_ID \
-    /var/lib/vz/template/cache/ubuntu-24.04-standard_24.04-2_amd64.tar.zst \
-    --hostname "$HOSTNAME" \
-    --memory $((MEMORY * 1024)) \
-    --cores $CORES \
-    --swap $((SWAP * 1024)) \
-    --net0 name=eth0,bridge=vmbr0,ip=${IP_ADDRESS}/${BRIDGE_CIDR},gw=${GATEWAY} \
-    --storage "$STORAGE" \
-    --rootfs "$STORAGE:${DISK_SIZE}" \
-    --unprivileged 0 \
-    --features nesting=1 \
-    --start 0 >/dev/null 2>&1
+{
+    pct create $CONTAINER_ID \
+        /var/lib/vz/template/cache/ubuntu-24.04-standard_24.04-2_amd64.tar.zst \
+        --hostname "$HOSTNAME" \
+        --memory $((MEMORY * 1024)) \
+        --cores $CORES \
+        --swap $((SWAP * 1024)) \
+        --net0 name=eth0,bridge=vmbr0,ip=${IP_ADDRESS}/${BRIDGE_CIDR},gw=${GATEWAY} \
+        --storage "$STORAGE" \
+        --rootfs "$STORAGE:${DISK_SIZE}" \
+        --unprivileged 0 \
+        --features nesting=1 \
+        --start 0
+} >> "$LOG_FILE" 2>&1
 
-echo -e "${GREEN}✓ Container created${NC}"
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "Container created"
+    show_progress 2 $TOTAL_STEPS "Configuring GPU passthrough"
+else
+    echo -e "${GREEN}✓ Container created${NC}"
+    echo ""
+    echo -e "${GREEN}>>> Configuring GPU passthrough...${NC}"
+fi
 
 # Configure GPU passthrough
-echo ""
-echo -e "${GREEN}>>> Configuring GPU passthrough...${NC}"
 
 # Add GPU device mappings to LXC config
-cat >> /etc/pve/lxc/${CONTAINER_ID}.conf << EOF
+{
+    cat >> /etc/pve/lxc/${CONTAINER_ID}.conf << EOF
 
 # AMD GPU passthrough
 lxc.cgroup2.devices.allow: c 226:* rwm
@@ -471,17 +503,32 @@ lxc.mount.entry: /dev/dri/by-path/pci-${GPU_PCI_PATH}-card dev/dri/card0 none bi
 lxc.mount.entry: /dev/dri/by-path/pci-${GPU_PCI_PATH}-render dev/dri/renderD128 none bind,optional,create=file 0 0
 lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file 0 0
 EOF
+} >> "$LOG_FILE" 2>&1
 
-echo -e "${GREEN}✓ GPU passthrough configured${NC}"
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "GPU passthrough configured"
+    show_progress 3 $TOTAL_STEPS "Starting container"
+else
+    echo -e "${GREEN}✓ GPU passthrough configured${NC}"
+    echo ""
+    echo -e "${GREEN}>>> Starting container...${NC}"
+fi
 
 # Start container
-echo ""
-echo -e "${GREEN}>>> Starting container...${NC}"
-pct start $CONTAINER_ID
+pct start $CONTAINER_ID >> "$LOG_FILE" 2>&1
 sleep 5
-echo -e "${GREEN}✓ Container started${NC}"
+
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "Container started"
+else
+    echo -e "${GREEN}✓ Container started${NC}"
+fi
 
 # Set root password
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+fi
+
 echo ""
 echo -e "${CYAN}Set root password for SSH access:${NC}"
 echo -n "Enter password: "
@@ -501,24 +548,40 @@ if [ -z "$ROOT_PASSWORD" ]; then
     exit 1
 fi
 
-echo -e "${GREEN}>>> Setting root password...${NC}"
-pct exec $CONTAINER_ID -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
+if [ "$QUICK_MODE" = true ]; then
+    echo ""
+    show_progress 4 $TOTAL_STEPS "Setting password and SSH"
+else
+    echo -e "${GREEN}>>> Setting root password...${NC}"
+fi
 
-# Enable password authentication for SSH
-pct exec $CONTAINER_ID -- sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-pct exec $CONTAINER_ID -- sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-pct exec $CONTAINER_ID -- systemctl restart ssh
+{
+    pct exec $CONTAINER_ID -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
 
-echo -e "${GREEN}✓ Password set and SSH configured${NC}"
+    # Enable password authentication for SSH
+    pct exec $CONTAINER_ID -- sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+    pct exec $CONTAINER_ID -- sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    pct exec $CONTAINER_ID -- systemctl restart ssh
+} >> "$LOG_FILE" 2>&1
+
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "Password and SSH configured"
+    show_progress 5 $TOTAL_STEPS "Verifying GPU passthrough"
+else
+    echo -e "${GREEN}✓ Password set and SSH configured${NC}"
+    echo ""
+    echo -e "${GREEN}>>> Verifying GPU passthrough...${NC}"
+fi
 
 # Verify GPU passthrough inside container
-echo ""
-echo -e "${GREEN}>>> Verifying GPU passthrough...${NC}"
-
 if pct exec $CONTAINER_ID -- test -e /dev/dri/card0 && \
    pct exec $CONTAINER_ID -- test -e /dev/dri/renderD128 && \
    pct exec $CONTAINER_ID -- test -e /dev/kfd; then
-    echo -e "${GREEN}✓ GPU devices accessible inside container${NC}"
+    if [ "$QUICK_MODE" = true ]; then
+        complete_progress "GPU passthrough verified"
+    else
+        echo -e "${GREEN}✓ GPU devices accessible inside container${NC}"
+    fi
 else
     echo -e "${RED}ERROR: GPU devices not accessible inside container${NC}"
     echo "Troubleshooting:"
@@ -528,87 +591,93 @@ else
 fi
 
 # Install Ollama
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Installing Ollama${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-
-echo -e "${GREEN}>>> Updating package list...${NC}"
-pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1
-
-# Count packages to upgrade
-PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
-
-if [ "$PACKAGE_COUNT" -gt 0 ]; then
-    echo -e "${GREEN}>>> Upgrading $PACKAGE_COUNT packages...${NC}"
-    
-    # Progress bar settings
-    BAR_WIDTH=50
-    
-    # Run upgrade and capture progress
-    pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' 2>&1" | {
-        COMPLETED=0
-        while IFS= read -r line; do
-            # Count completed packages (look for "Setting up" which is the final step)
-            if echo "$line" | grep -q "^Setting up"; then
-                COMPLETED=$((COMPLETED + 1))
-                # Calculate progress
-                PERCENT=$((COMPLETED * 100 / PACKAGE_COUNT))
-                FILLED=$((BAR_WIDTH * COMPLETED / PACKAGE_COUNT))
-                EMPTY=$((BAR_WIDTH - FILLED))
-                
-                # Draw progress bar
-                printf "\r${GREEN}[${NC}"
-                printf "%${FILLED}s" | tr ' ' '='
-                printf "%${EMPTY}s" | tr ' ' ' '
-                printf "${GREEN}]${NC} %3d%% (%d/%d)" "$PERCENT" "$COMPLETED" "$PACKAGE_COUNT"
-            fi
-        done
-        echo ""
-    }
-    echo -e "${GREEN}✓ System packages updated${NC}"
-else
-    echo -e "${GREEN}✓ All packages up to date${NC}"
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Installing Ollama${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
 fi
 
-echo -e "${GREEN}>>> Installing dependencies...${NC}"
-pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >/dev/null 2>&1
+if [ "$QUICK_MODE" = true ]; then
+    show_progress 6 $TOTAL_STEPS "Updating system packages"
+else
+    echo -e "${GREEN}>>> Updating package list...${NC}"
+fi
 
-echo -e "${GREEN}>>> Installing ROCm utilities...${NC}"
-pct exec $CONTAINER_ID -- bash -c "
-    mkdir -p --mode=0755 /etc/apt/keyrings
-    wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
-    echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
-    apt update -qq 2>&1 | grep -v 'packages can be upgraded' || true
-    apt install -y rocm-smi radeontop 2>&1 | grep -v 'Setting up' | grep -v 'Unpacking' | grep -v 'Preparing' || true
-" >/dev/null 2>&1
-echo -e "${GREEN}✓ ROCm utilities installed${NC}"
+{
+    pct exec $CONTAINER_ID -- apt update -qq
+    
+    # Count packages to upgrade
+    PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
+    
+    if [ "$PACKAGE_COUNT" -gt 0 ]; then
+        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'"
+    fi
+} >> "$LOG_FILE" 2>&1
 
-echo -e "${GREEN}>>> Installing Ollama...${NC}"
-pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" 2>&1 | grep -E "Downloading|###|GPU ready|Install complete" || true
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "System packages updated ($PACKAGE_COUNT packages)"
+    show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
+else
+    if [ "$PACKAGE_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}✓ System packages updated${NC}"
+    else
+        echo -e "${GREEN}✓ All packages up to date${NC}"
+    fi
+    echo -e "${GREEN}>>> Installing dependencies...${NC}"
+fi
 
-echo ""
-echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
-# Create systemd override to set OLLAMA_HOST
-pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
-pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << "EOFMARKER"
+{
+    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
+    
+    # Install ROCm utilities
+    pct exec $CONTAINER_ID -- bash -c "
+        mkdir -p --mode=0755 /etc/apt/keyrings
+        wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
+        apt update -qq
+        apt install -y rocm-smi radeontop
+    "
+    
+    # Install Ollama
+    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
+} >> "$LOG_FILE" 2>&1
+
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "Ollama and ROCm utilities installed"
+    show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
+else
+    echo -e "${GREEN}✓ ROCm utilities installed${NC}"
+    echo -e "${GREEN}>>> Installing Ollama...${NC}"
+    echo ""
+    echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
+fi
+{
+    # Create systemd override to set OLLAMA_HOST
+    pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
+    pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << "EOFMARKER"
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
 EOFMARKER'
 
-echo ""
-echo -e "${GREEN}>>> Restarting Ollama with new configuration...${NC}"
-pct exec $CONTAINER_ID -- systemctl daemon-reload
-pct exec $CONTAINER_ID -- systemctl enable ollama 2>/dev/null || true
-pct exec $CONTAINER_ID -- systemctl restart ollama 2>/dev/null || true
-sleep 3
+    pct exec $CONTAINER_ID -- systemctl daemon-reload
+    pct exec $CONTAINER_ID -- systemctl enable ollama
+    pct exec $CONTAINER_ID -- systemctl restart ollama
+    sleep 3
+} >> "$LOG_FILE" 2>&1
 
-echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"
+if [ "$QUICK_MODE" = true ]; then
+    complete_progress "Ollama configured and running"
+else
+    echo ""
+    echo -e "${GREEN}>>> Restarting Ollama with new configuration...${NC}"
+    echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"
+    echo ""
+    echo -e "${GREEN}>>> Creating update command in container...${NC}"
+fi
 
 # Create update command inside the container
-echo ""
-echo -e "${GREEN}>>> Creating update command in container...${NC}"
 pct exec $CONTAINER_ID -- bash -c 'cat > /usr/local/bin/update << '\''UPDATEEOF'\''
 #!/usr/bin/env bash
 #
@@ -687,9 +756,17 @@ else
     exit 1
 fi
 UPDATEEOF
-chmod +x /usr/local/bin/update'
+chmod +x /usr/local/bin/update' >> "$LOG_FILE" 2>&1
 
-echo -e "${GREEN}✓ Update command created${NC}"
+if [ "$QUICK_MODE" = false ]; then
+    echo -e "${GREEN}✓ Update command created${NC}"
+fi
+
+# Clear screen and show completion message
+if [ "$QUICK_MODE" = true ]; then
+    clear
+    echo ""
+fi
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -701,6 +778,12 @@ echo -e "   Hostname:     ${GREEN}$HOSTNAME${NC}"
 echo -e "   IP Address:   ${GREEN}$IP_ADDRESS${NC}"
 echo -e "   Container ID: ${GREEN}$CONTAINER_ID${NC}"
 echo -e "   Ollama API:   ${GREEN}http://$IP_ADDRESS:11434${NC}"
+
+if [ "$QUICK_MODE" = true ]; then
+    echo ""
+    echo -e "${CYAN}📄 Installation Log:${NC} ${GREEN}$LOG_FILE${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}🚀 Quick Start - Verify Everything Works:${NC}"
@@ -737,4 +820,5 @@ echo -e "${CYAN}📊 Alternative GPU Monitor:${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
 echo -e "   ${GREEN}radeontop${NC}  ${YELLOW}(interactive, press 'q' to quit)${NC}"
 echo ""
+
 

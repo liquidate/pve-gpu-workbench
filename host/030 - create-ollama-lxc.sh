@@ -376,7 +376,7 @@ pct create $CONTAINER_ID \
     --storage "$STORAGE" \
     --rootfs "$STORAGE:${DISK_SIZE}" \
     --unprivileged 1 \
-    --features nesting=1 \
+    --features nesting=1 2>/dev/null \
     --start 0
 
 echo -e "${GREEN}✓ Container created${NC}"

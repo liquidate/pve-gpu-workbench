@@ -29,6 +29,15 @@ if ! detect_amd_gpus; then
 fi
 
 echo -e "${GREEN}>>> Installing AMD ROCm drivers${NC}"
+
+# Ensure required tools are available
+for tool in wget gpg; do
+    if ! command -v $tool &>/dev/null; then
+        echo ">>> Installing required tool: $tool"
+        apt-get update -qq && apt-get install -y $tool >/dev/null 2>&1
+    fi
+done
+
 echo ">>> Adding AMD ROCm 7.1.X repository"
 mkdir --parents /etc/apt/keyrings
 chmod 0755 /etc/apt/keyrings

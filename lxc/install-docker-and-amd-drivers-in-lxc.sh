@@ -107,7 +107,7 @@ apt remove -y docker-compose docker docker.io containerd runc >/dev/null 2>&1 ||
 
 # Update package list and upgrade existing packages
 if [ "$VERBOSE" = "1" ]; then
-    echo -e "${GREEN}>>> Updating system packages...${NC}"
+echo -e "${GREEN}>>> Updating system packages...${NC}"
     apt update
     apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
     echo -e "${GREEN}✓ System packages updated${NC}"
@@ -123,7 +123,7 @@ fi
 # Install Docker prerequisites
 echo -e "${GREEN}>>> Installing Docker prerequisites...${NC}"
 if [ "$VERBOSE" = "1" ]; then
-    apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
 else
     apt install -y $QUIET_APT ca-certificates curl gnupg lsb-release sudo pciutils >/dev/null 2>&1
 fi
@@ -141,7 +141,7 @@ echo \
 # Update package list
 echo -e "${GREEN}>>> Updating package cache...${NC}"
 if [ "$VERBOSE" = "1" ]; then
-    apt update
+apt update
 else
     apt update $QUIET_APT >/dev/null 2>&1
 fi
@@ -149,7 +149,7 @@ fi
 # Install Docker Engine (latest stable)
 echo -e "${GREEN}>>> Installing Docker Engine...${NC}"
 if [ "$VERBOSE" = "1" ]; then
-    apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 else
     apt install -y $QUIET_APT docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
 fi
@@ -164,19 +164,19 @@ usermod -a -G docker root >/dev/null 2>&1
 
 # Verify Docker installation
 if [ "$VERBOSE" = "1" ]; then
-    echo -e "${GREEN}>>> Docker version installed:${NC}"
-    docker --version
-    echo -e "${GREEN}>>> Docker Compose version installed:${NC}"
-    docker compose version
-    echo -e "${GREEN}>>> Containerd version installed:${NC}"
-    containerd --version
+echo -e "${GREEN}>>> Docker version installed:${NC}"
+docker --version
+echo -e "${GREEN}>>> Docker Compose version installed:${NC}"
+docker compose version
+echo -e "${GREEN}>>> Containerd version installed:${NC}"
+containerd --version
 fi
 echo -e "${GREEN}✓ Docker installation completed${NC}"
 
 # Install docker-compose bash completion
 if [ "$VERBOSE" = "1" ]; then
-    curl -L https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
-        -o /etc/bash_completion.d/docker-compose
+curl -L https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
+    -o /etc/bash_completion.d/docker-compose
 else
     curl -sL https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
         -o /etc/bash_completion.d/docker-compose 2>/dev/null
@@ -198,8 +198,8 @@ sudo mkdir --parents --mode=0755 /etc/apt/keyrings 2>/dev/null
 # keyring required by apt and store in the keyring directory
 if [ "$VERBOSE" = "1" ]; then
     echo -e "${GREEN}>>> Adding AMD ROCm repository...${NC}"
-    wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
-        gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
+    gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
 else
     wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - 2>/dev/null | \
         gpg --dearmor 2>/dev/null | sudo tee /etc/apt/keyrings/rocm.gpg >/dev/null 2>&1
@@ -220,7 +220,7 @@ EOF
 
 echo -e "${GREEN}>>> Updating package cache...${NC}"
 if [ "$VERBOSE" = "1" ]; then
-    apt update
+apt update
 else
     apt update $QUIET_APT >/dev/null 2>&1
 fi
@@ -231,7 +231,7 @@ fi
 # Install ROCm 7.1.0 (runtime libraries without DKMS)
 if [ "$VERBOSE" = "1" ]; then
     echo -e "${GREEN}>>> Installing AMD ROCm libraries...${NC}"
-    apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
+apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
     echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 else
     echo -e "${GREEN}>>> Installing AMD ROCm libraries [2-3 min]...${NC}"
@@ -242,7 +242,7 @@ fi
 # Install ROCm development packages (needed for Ollama Docker to compile if needed)
 if [ "$VERBOSE" = "1" ]; then
     echo -e "${GREEN}>>> Installing ROCm development packages...${NC}"
-    apt install -y rocm-core rocm-dev hipcc
+apt install -y rocm-core rocm-dev hipcc
     echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 else
     echo -e "${GREEN}>>> Installing ROCm development packages [1-2 min]...${NC}"
@@ -382,8 +382,8 @@ echo ""
 
 # Check if running interactively or via pct exec
 if [ -t 0 ]; then
-    read -r -p "Run Test 1? This will download ~1GB. [Y/n]: " RUN_TEST1
-    RUN_TEST1=${RUN_TEST1:-Y}
+read -r -p "Run Test 1? This will download ~1GB. [Y/n]: " RUN_TEST1
+RUN_TEST1=${RUN_TEST1:-Y}
 else
     # Non-interactive mode (pct exec) - skip Docker test by default
     echo -e "${YELLOW}Non-interactive mode detected. Skipping Docker test.${NC}"
@@ -399,25 +399,25 @@ if [[ "$RUN_TEST1" =~ ^[Yy]$ ]]; then
     fi
 fi
 
-echo ""
-echo -e "${GREEN}==========================================${NC}"
-echo -e "${GREEN}Installation Complete!${NC}"
-echo -e "${GREEN}==========================================${NC}"
-echo ""
-echo -e "${GREEN}Your LXC container is now ready to use AMD GPUs in Docker containers.${NC}"
-echo ""
+        echo ""
+        echo -e "${GREEN}==========================================${NC}"
+        echo -e "${GREEN}Installation Complete!${NC}"
+        echo -e "${GREEN}==========================================${NC}"
+        echo ""
+        echo -e "${GREEN}Your LXC container is now ready to use AMD GPUs in Docker containers.${NC}"
+        echo ""
 echo -e "${YELLOW}=== Monitoring Tools ===${NC}"
-echo ""
+        echo ""
 echo -e "${GREEN}GPU Monitoring:${NC}"
 echo "  nvtop                                   # GPU monitor (AMD/NVIDIA)"
 echo "  radeontop                               # AMD-specific GPU monitor"
 echo "  watch -n 0.5 rocm-smi --showuse --showmemuse  # Real-time GPU stats"
-echo ""
+        echo ""
 echo -e "${GREEN}System Monitoring:${NC}"
 echo "  btop                                    # Modern resource monitor (best)"
 echo "  htop                                    # Classic process monitor"
-echo ""
+    echo ""
 echo -e "${GREEN}GPU Information:${NC}"
 echo "  rocm-smi --showproductname --showhw     # GPU details"
 echo "  rocminfo | grep -A 10 'Agent 2'         # ROCm agent info"
-echo ""
+    echo ""

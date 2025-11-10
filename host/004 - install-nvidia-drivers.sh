@@ -29,6 +29,15 @@ if ! detect_nvidia_gpus; then
 fi
 
 echo -e "${GREEN}>>> Installing NVIDIA drivers${NC}"
+
+# Ensure required tools are available
+for tool in wget; do
+    if ! command -v $tool &>/dev/null; then
+        echo ">>> Installing required tool: $tool"
+        apt-get update -qq && apt-get install -y $tool >/dev/null 2>&1
+    fi
+done
+
 apt update
 echo ">>> Installing Proxmox headers for current kernel"
 apt install -y proxmox-headers-"$(uname -r)"

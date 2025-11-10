@@ -56,16 +56,6 @@ check_status_000() {
     echo "INFO"
 }
 
-check_status_001() {
-    # Check if essential tools are installed
-    if command -v curl &>/dev/null && command -v wget &>/dev/null && \
-       command -v git &>/dev/null && command -v nano &>/dev/null; then
-        echo "INSTALLED"
-    else
-        echo "NOT INSTALLED"
-    fi
-}
-
 check_status_002() {
     # Check if AMD iGPU VRAM allocation is configured (amdgpu.gttsize in GRUB)
     if grep -q "amdgpu.gttsize=" /etc/default/grub 2>/dev/null; then
@@ -314,13 +304,14 @@ show_main_menu() {
     echo -e "${GREEN}═══ HOST CONFIGURATION ═══${NC}"
     echo ""
     
-    # List host setup scripts (001-008), filtering by GPU
+    # List host setup scripts (002-008), filtering by GPU
     while IFS= read -r script; do
         local script_num
         script_num=$(basename "$script" | grep -oP '^\d+')
         
-        # Skip script 000 (GPU list - redundant, shown at top)
+        # Skip scripts 000 (GPU list - redundant) and 001 (not needed - Proxmox has built-in tools)
         [ "$script_num" = "000" ] && continue
+        [ "$script_num" = "001" ] && continue
         
         # Filter GPU-specific scripts
         case "$script_num" in
@@ -333,7 +324,7 @@ show_main_menu() {
                 [ "$HAS_NVIDIA_GPU" = true ] && display_script "$script"
                 ;;
             *)
-                # Universal scripts (001, 007, 008)
+                # Universal scripts (007, 008)
                 display_script "$script"
                 ;;
         esac
@@ -510,8 +501,8 @@ while true; do
                 local script_num
                 script_num=$(basename "$script" | grep -oP '^\d+')
                 
-                # Skip script 000 (GPU list - redundant)
-                if [ "$script_num" = "000" ]; then
+                # Skip scripts 000 (GPU list - redundant) and 001 (not needed - Proxmox has built-in tools)
+                if [ "$script_num" = "000" ] || [ "$script_num" = "001" ]; then
                     continue
                 fi
                 

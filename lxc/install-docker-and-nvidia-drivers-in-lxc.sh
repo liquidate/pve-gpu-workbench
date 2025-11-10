@@ -78,7 +78,7 @@ echo -e "${GREEN}✓ System packages updated${NC}"
 # Install Docker prerequisites
 echo -e "${GREEN}>>> Installing Docker prerequisites...${NC}"
 if [ "$VERBOSE" = "1" ]; then
-    apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
 else
     apt install -y $QUIET_APT ca-certificates curl gnupg lsb-release sudo pciutils >/dev/null 2>&1
 fi
@@ -296,8 +296,8 @@ echo ""
 
 # Check if running interactively or via pct exec
 if [ -t 0 ]; then
-    read -r -p "Run Test 1? This will download ~250MB. [Y/n]: " RUN_TEST1
-    RUN_TEST1=${RUN_TEST1:-Y}
+read -r -p "Run Test 1? This will download ~250MB. [Y/n]: " RUN_TEST1
+RUN_TEST1=${RUN_TEST1:-Y}
 else
     # Non-interactive mode (pct exec) - skip Docker test by default
     echo -e "${YELLOW}Non-interactive mode detected. Skipping Docker test.${NC}"

@@ -62,7 +62,7 @@ echo -e "${GREEN}✓ All ROCm tools installed${NC}"
 echo ""
 echo -e "${YELLOW}>>> Testing rocminfo...${NC}"
 if rocminfo | grep -qi "Agent [0-9]"; then
-    rocminfo | grep -i -A5 'Agent [0-9]'
+rocminfo | grep -i -A5 'Agent [0-9]'
     echo -e "${GREEN}✓ rocminfo detected GPU agents${NC}"
 else
     echo -e "${RED}✗ rocminfo did not detect GPU agents${NC}"
@@ -74,7 +74,7 @@ fi
 echo ""
 echo -e "${YELLOW}>>> Testing rocm-smi...${NC}"
 if rocm-smi --showproductname 2>&1 | grep -qi "GPU"; then
-    rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname
+rocm-smi --showmemuse --showuse --showmeminfo all --showhw --showproductname
     echo -e "${GREEN}✓ rocm-smi working${NC}"
 else
     echo -e "${YELLOW}⚠ rocm-smi may not fully access GPU${NC}"

@@ -61,7 +61,7 @@ echo -e "${GREEN}✓ nvidia-smi installed${NC}"
 echo ""
 echo -e "${YELLOW}>>> Testing nvidia-smi...${NC}"
 if nvidia-smi >/dev/null 2>&1; then
-    nvidia-smi
+nvidia-smi
     echo ""
     echo -e "${GREEN}✓ nvidia-smi working${NC}"
 else

@@ -383,17 +383,24 @@ show_system_info() {
     if [ "$HAS_AMD_GPU" = true ]; then
         echo -e "${GREEN}AMD GPU:${NC}"
         lspci | grep -i "VGA.*AMD\|Display.*AMD" | sed 's/^/  /'
-        if command -v rocm-smi &>/dev/null; then
-            echo -e "\n${DIM}ROCm Version:${NC}"
-            rocm-smi --version 2>/dev/null | grep "ROCm" | sed 's/^/  /' || echo "  Not available"
+        if command -v rocm-smi &>/dev/null || [ -d "/opt/rocm" ]; then
+            echo ""
+            echo -e "${GREEN}ROCm:${NC}"
+            if [ -f "/opt/rocm/.info/version" ]; then
+                echo -e "  Version: $(cat /opt/rocm/.info/version)"
+            else
+                rocm-smi --version 2>/dev/null | grep -i "ROCM-SMI-LIB version" | sed 's/ROCM-SMI-LIB version: /  Version: /' || echo "  Not detected"
+            fi
         fi
     fi
     if [ "$HAS_NVIDIA_GPU" = true ]; then
+        echo ""
         echo -e "${GREEN}NVIDIA GPU:${NC}"
         lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | sed 's/^/  /'
         if command -v nvidia-smi &>/dev/null; then
-            echo -e "\n${DIM}Driver Version:${NC}"
-            nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | sed 's/^/  /' || echo "  Not available"
+            echo ""
+            echo -e "${GREEN}CUDA:${NC}"
+            nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | sed 's/^/  Driver: /' || echo "  Not detected"
         fi
     fi
     echo ""

@@ -465,11 +465,62 @@ else
 fi
 
 echo ""
+echo -e "${GREEN}>>> Detecting system resources...${NC}"
+
+# Total RAM
+TOTAL_RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
+
+# Check if GPU VRAM is allocated (from script 002)
+GPU_VRAM_ALLOCATED=0
+if grep -q "amdgpu.gttsize=98304" /proc/cmdline 2>/dev/null; then
+    GPU_VRAM_ALLOCATED=96
+    echo -e "${GREEN}✓ GPU VRAM allocated: ${GPU_VRAM_ALLOCATED}GB (models load here)${NC}"
+elif grep -q "amdgpu.gttsize" /proc/cmdline 2>/dev/null; then
+    # Detect custom VRAM size
+    GPU_VRAM_ALLOCATED=$(grep -oP 'amdgpu.gttsize=\K\d+' /proc/cmdline | head -n1)
+    GPU_VRAM_ALLOCATED=$((GPU_VRAM_ALLOCATED / 1024))  # Convert to GB
+    echo -e "${GREEN}✓ GPU VRAM allocated: ${GPU_VRAM_ALLOCATED}GB${NC}"
+fi
+
+# Calculate available for LXC (Total - GPU VRAM - 4GB host overhead)
+AVAILABLE_RAM=$((TOTAL_RAM_GB - GPU_VRAM_ALLOCATED - 4))
+if [ $AVAILABLE_RAM -lt 0 ]; then
+    AVAILABLE_RAM=$((TOTAL_RAM_GB - 4))
+fi
+
+echo -e "${CYAN}System Memory Overview:${NC}"
+echo "  Total RAM:           ${TOTAL_RAM_GB}GB"
+if [ $GPU_VRAM_ALLOCATED -gt 0 ]; then
+    echo "  GPU VRAM:            ${GPU_VRAM_ALLOCATED}GB (for AI model weights)"
+fi
+echo "  Host overhead:       ~4GB"
+echo "  Available for LXC:   ~${AVAILABLE_RAM}GB"
+echo ""
+
+# Determine smart defaults based on available RAM
+DEFAULT_DISK="256"
+DEFAULT_SWAP="8192"
+DEFAULT_CORES="12"
+
+if [ $AVAILABLE_RAM -ge 20 ]; then
+    DEFAULT_MEMORY="16384"  # 16GB - comfortable for multi-service
+elif [ $AVAILABLE_RAM -ge 12 ]; then
+    DEFAULT_MEMORY="8192"   # 8GB - works for most single services
+else
+    DEFAULT_MEMORY="4096"   # 4GB - minimal
+fi
+
 echo -e "${GREEN}>>> Container resource configuration...${NC}"
+echo ""
+echo -e "${CYAN}Recommended for multi-service GPU workloads:${NC}"
+echo "  • Disk: 256GB+ (OS, Docker, models, outputs)"
+echo "  • RAM:  16GB+  (Docker overhead, preprocessing)"
+echo "  • Note: AI models load into GPU VRAM, not LXC RAM"
+echo ""
 
 # Prompt for disk size
-read -r -p "Enter disk size in GB [160]: " DISK_SIZE
-DISK_SIZE=${DISK_SIZE:-160}
+read -r -p "Enter disk size in GB [$DEFAULT_DISK]: " DISK_SIZE
+DISK_SIZE=${DISK_SIZE:-$DEFAULT_DISK}
 
 # Validate disk size
 if ! [[ "$DISK_SIZE" =~ ^[0-9]+$ ]] || [ "$DISK_SIZE" -lt 8 ]; then
@@ -477,9 +528,15 @@ if ! [[ "$DISK_SIZE" =~ ^[0-9]+$ ]] || [ "$DISK_SIZE" -lt 8 ]; then
     exit 1
 fi
 
+# Warn if disk is small for multi-service
+if [ "$DISK_SIZE" -lt 200 ]; then
+    echo -e "${YELLOW}⚠️  Warning: ${DISK_SIZE}GB may be insufficient for multiple services${NC}"
+    echo "   (Ollama models + ComfyUI + outputs can easily exceed 100GB)"
+fi
+
 # Prompt for memory
-read -r -p "Enter memory in MB [8192]: " MEMORY
-MEMORY=${MEMORY:-8192}
+read -r -p "Enter memory in MB [$DEFAULT_MEMORY]: " MEMORY
+MEMORY=${MEMORY:-$DEFAULT_MEMORY}
 
 # Validate memory
 if ! [[ "$MEMORY" =~ ^[0-9]+$ ]] || [ "$MEMORY" -lt 512 ]; then
@@ -487,9 +544,30 @@ if ! [[ "$MEMORY" =~ ^[0-9]+$ ]] || [ "$MEMORY" -lt 512 ]; then
     exit 1
 fi
 
+# Check if memory exceeds available
+MEMORY_GB=$((MEMORY / 1024))
+if [ $MEMORY_GB -gt $AVAILABLE_RAM ]; then
+    echo -e "${YELLOW}⚠️  Warning: Requested ${MEMORY_GB}GB exceeds available ~${AVAILABLE_RAM}GB${NC}"
+    if [ $GPU_VRAM_ALLOCATED -gt 0 ]; then
+        echo "   (After accounting for ${GPU_VRAM_ALLOCATED}GB GPU VRAM)"
+    fi
+    echo ""
+    read -r -p "Continue anyway? [y/N]: " CONTINUE
+    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+        MEMORY=$DEFAULT_MEMORY
+        echo "Using ${MEMORY}MB instead"
+    fi
+fi
+
+# Warn if memory is small
+if [ $MEMORY_GB -lt 16 ]; then
+    echo -e "${YELLOW}⚠️  Note: ${MEMORY_GB}GB RAM is minimal for running multiple GPU services${NC}"
+    echo "   Recommended: 16GB+ for Ollama + ComfyUI + other services"
+fi
+
 # Prompt for CPU cores
-read -r -p "Enter CPU cores [8]: " CORES
-CORES=${CORES:-8}
+read -r -p "Enter CPU cores [$DEFAULT_CORES]: " CORES
+CORES=${CORES:-$DEFAULT_CORES}
 
 # Validate cores
 if ! [[ "$CORES" =~ ^[0-9]+$ ]] || [ "$CORES" -lt 1 ]; then
@@ -498,8 +576,8 @@ if ! [[ "$CORES" =~ ^[0-9]+$ ]] || [ "$CORES" -lt 1 ]; then
 fi
 
 # Prompt for swap
-read -r -p "Enter swap in MB [4096]: " SWAP
-SWAP=${SWAP:-4096}
+read -r -p "Enter swap in MB [$DEFAULT_SWAP]: " SWAP
+SWAP=${SWAP:-$DEFAULT_SWAP}
 
 # Validate swap
 if ! [[ "$SWAP" =~ ^[0-9]+$ ]]; then
@@ -828,3 +906,105 @@ echo ""
 echo -e "${YELLOW}IMPORTANT: Change the default password after first login!${NC}"
 echo ""
 
+# Offer to install add-on services
+echo ""
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Optional Add-ons${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo "Install additional services in this container?"
+echo ""
+echo -e "${CYAN}Available add-ons:${NC}"
+echo "  [1] Portainer       - Docker management web UI"
+echo "  [2] Ollama          - Run LLMs (Llama, Mistral, etc.)"
+echo "  [3] Open WebUI      - ChatGPT-like interface for Ollama"
+echo "  [4] ComfyUI         - Stable Diffusion image generation"
+echo "  [5] All of the above"
+echo "  [6] None - I'll install manually later"
+echo ""
+read -r -p "Select options (comma-separated, e.g. 1,2,3) [6]: " ADDON_CHOICE
+ADDON_CHOICE=${ADDON_CHOICE:-6}
+
+# Parse choices
+INSTALL_PORTAINER=false
+INSTALL_OLLAMA=false
+INSTALL_OPENWEBUI=false
+INSTALL_COMFYUI=false
+
+if [[ "$ADDON_CHOICE" == "5" ]]; then
+    INSTALL_PORTAINER=true
+    INSTALL_OLLAMA=true
+    INSTALL_OPENWEBUI=true
+    INSTALL_COMFYUI=true
+elif [[ "$ADDON_CHOICE" != "6" ]]; then
+    IFS=',' read -ra CHOICES <<< "$ADDON_CHOICE"
+    for choice in "${CHOICES[@]}"; do
+        choice=$(echo "$choice" | tr -d ' ')
+        case "$choice" in
+            1) INSTALL_PORTAINER=true ;;
+            2) INSTALL_OLLAMA=true ;;
+            3) INSTALL_OPENWEBUI=true ;;
+            4) INSTALL_COMFYUI=true ;;
+        esac
+    done
+fi
+
+# Install selected add-ons
+if [ "$INSTALL_PORTAINER" = true ] || [ "$INSTALL_OLLAMA" = true ] || [ "$INSTALL_OPENWEBUI" = true ] || [ "$INSTALL_COMFYUI" = true ]; then
+    echo ""
+    echo -e "${GREEN}>>> Installing selected add-ons...${NC}"
+    echo ""
+    
+    if [ "$INSTALL_PORTAINER" = true ]; then
+        echo -e "${CYAN}=== Installing Portainer ===${NC}"
+        bash "${SCRIPT_DIR}/032 - install-portainer.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Portainer installation had issues${NC}"
+        echo ""
+    fi
+    
+    if [ "$INSTALL_OLLAMA" = true ]; then
+        echo -e "${CYAN}=== Installing Ollama ===${NC}"
+        bash "${SCRIPT_DIR}/033 - install-ollama.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Ollama installation had issues${NC}"
+        echo ""
+    fi
+    
+    if [ "$INSTALL_OPENWEBUI" = true ]; then
+        echo -e "${CYAN}=== Installing Open WebUI ===${NC}"
+        bash "${SCRIPT_DIR}/034 - install-open-webui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Open WebUI installation had issues${NC}"
+        echo ""
+    fi
+    
+    if [ "$INSTALL_COMFYUI" = true ]; then
+        echo -e "${CYAN}=== Installing ComfyUI ===${NC}"
+        bash "${SCRIPT_DIR}/035 - install-comfyui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  ComfyUI installation had issues${NC}"
+        echo ""
+    fi
+    
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Add-on Installation Complete!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    
+    # Show access URLs
+    echo -e "${CYAN}Access your services:${NC}"
+    if [ "$INSTALL_PORTAINER" = true ]; then
+        echo "  Portainer:  https://$IP_ADDRESS:9443"
+    fi
+    if [ "$INSTALL_OLLAMA" = true ]; then
+        echo "  Ollama:     ssh root@$IP_ADDRESS, then: ollama run llama3.2:3b"
+    fi
+    if [ "$INSTALL_OPENWEBUI" = true ]; then
+        echo "  Open WebUI: http://$IP_ADDRESS:3000"
+    fi
+    if [ "$INSTALL_COMFYUI" = true ]; then
+        echo "  ComfyUI:    http://$IP_ADDRESS:8188"
+    fi
+    echo ""
+else
+    echo ""
+    echo -e "${CYAN}You can install add-ons later by running:${NC}"
+    echo "  ./guided-install.sh → Choose 032-035"
+    echo ""
+fi
+
+echo ""

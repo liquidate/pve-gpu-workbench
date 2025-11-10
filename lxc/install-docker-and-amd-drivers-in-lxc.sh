@@ -9,6 +9,16 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
+# Check if verbose mode is enabled (set VERBOSE=1 to see all output)
+VERBOSE=${VERBOSE:-0}
+if [ "$VERBOSE" = "1" ]; then
+    QUIET=""
+    QUIET_APT=""
+else
+    QUIET=">/dev/null 2>&1"
+    QUIET_APT="-qq"
+fi
+
 # Get script directory and source colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -56,12 +66,23 @@ apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || tru
 
 # Update package list and upgrade existing packages
 echo -e "${GREEN}>>> Updating system packages...${NC}"
-apt update
-apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+if [ "$VERBOSE" = "1" ]; then
+    apt update
+    apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+else
+    apt update $QUIET_APT >/dev/null 2>&1
+    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" 2>&1 | grep -v "^Selecting\|^Preparing\|^Unpacking\|^Setting up\|^Processing" || true
+fi
+echo -e "${GREEN}✓ System packages updated${NC}"
 
 # Install Docker prerequisites
-echo -e "${GREEN}>>> Installing prerequisites...${NC}"
-apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+echo -e "${GREEN}>>> Installing Docker prerequisites...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+else
+    apt install -y $QUIET_APT ca-certificates curl gnupg lsb-release sudo pciutils >/dev/null 2>&1
+fi
+echo -e "${GREEN}✓ Prerequisites installed${NC}"
 
 # Add Docker's official GPG key
 mkdir -p /etc/apt/keyrings
@@ -73,10 +94,21 @@ echo \
   $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 # Update package list
-apt update
+echo -e "${GREEN}>>> Updating package cache...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt update
+else
+    apt update $QUIET_APT >/dev/null 2>&1
+fi
 
 # Install Docker Engine (latest stable)
-apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+echo -e "${GREEN}>>> Installing Docker Engine...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+else
+    apt install -y $QUIET_APT docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+fi
+echo -e "${GREEN}✓ Docker Engine installed${NC}"
 
 # Start Docker daemon
 systemctl start docker
@@ -129,21 +161,42 @@ Pin: release o=repo.radeon.com
 Pin-Priority: 600
 EOF
 
-apt update
+echo -e "${GREEN}>>> Updating package cache...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt update
+else
+    apt update $QUIET_APT >/dev/null 2>&1
+fi
 
 # Install AMD libraries (user-space only, NO kernel modules)
 # Note: We install the latest available version, but it must match the host driver
-echo -e "${GREEN}>>> Installing AMD ROCm libraries...${NC}"
+echo -e "${GREEN}>>> Installing AMD ROCm libraries (this may take a few minutes)...${NC}"
 
 # Install ROCm 7.1.0 (runtime libraries without DKMS)
-# This installs runtime libraries without DKMS
-apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils
+else
+    apt install -y $QUIET_APT rocm-libs rocm-smi rocminfo rocm-device-libs rocm-utils 2>&1 | grep -E "^E:|^Err:" || true
+fi
+echo -e "${GREEN}✓ ROCm libraries installed${NC}"
 
 # Install ROCm development packages (needed for Ollama Docker to compile if needed)
-apt install -y rocm-core rocm-dev hipcc
+echo -e "${GREEN}>>> Installing ROCm development packages...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y rocm-core rocm-dev hipcc
+else
+    apt install -y $QUIET_APT rocm-core rocm-dev hipcc >/dev/null 2>&1
+fi
+echo -e "${GREEN}✓ ROCm dev packages installed${NC}"
 
 # Install monitoring tools
-apt install -y nvtop radeontop
+echo -e "${GREEN}>>> Installing monitoring tools...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y nvtop radeontop
+else
+    apt install -y $QUIET_APT nvtop radeontop >/dev/null 2>&1
+fi
+echo -e "${GREEN}✓ Monitoring tools installed${NC}"
 
 # Add root user to render and video groups (critical for GPU access)
 usermod -a -G render,video root

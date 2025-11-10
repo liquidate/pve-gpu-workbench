@@ -9,6 +9,16 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
+# Check if verbose mode is enabled (set VERBOSE=1 to see all output)
+VERBOSE=${VERBOSE:-0}
+if [ "$VERBOSE" = "1" ]; then
+    QUIET=""
+    QUIET_APT=""
+else
+    QUIET=">/dev/null 2>&1"
+    QUIET_APT="-qq"
+fi
+
 # Get script directory and source colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -56,12 +66,23 @@ apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || tru
 
 # Update package list and upgrade existing packages
 echo -e "${GREEN}>>> Updating system packages...${NC}"
-apt update
-apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+if [ "$VERBOSE" = "1" ]; then
+    apt update
+    apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+else
+    apt update $QUIET_APT >/dev/null 2>&1
+    apt upgrade -y $QUIET_APT -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" 2>&1 | grep -v "^Selecting\|^Preparing\|^Unpacking\|^Setting up\|^Processing" || true
+fi
+echo -e "${GREEN}✓ System packages updated${NC}"
 
 # Install Docker prerequisites
-echo -e "${GREEN}>>> Installing prerequisites...${NC}"
-apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+echo -e "${GREEN}>>> Installing Docker prerequisites...${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    apt install -y ca-certificates curl gnupg lsb-release sudo pciutils
+else
+    apt install -y $QUIET_APT ca-certificates curl gnupg lsb-release sudo pciutils >/dev/null 2>&1
+fi
+echo -e "${GREEN}✓ Prerequisites installed${NC}"
 
 # Add Docker's official GPG key
 mkdir -p /etc/apt/keyrings

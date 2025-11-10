@@ -423,7 +423,7 @@ show_main_menu() {
     
     # Show optional scripts
     echo ""
-    echo -e "${CYAN}═══ OPTIONAL ═══${NC}"
+    echo -e "${GREEN}═══ OPTIONAL ═══${NC}"
     echo ""
     for cmd in power; do
         [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"

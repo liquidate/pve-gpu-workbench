@@ -23,15 +23,25 @@ fi
 show_progress() {
     local pid=$1
     local message=$2
-    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
     
-    while kill -0 $pid 2>/dev/null; do
-        i=$(( (i+1) %10 ))
-        printf "\r${GREEN}${message} ${spin:$i:1}${NC}"
-        sleep 0.1
-    done
-    printf "\r${GREEN}✓ ${message}${NC}\n"
+    # Check if running in interactive terminal
+    if [ -t 1 ]; then
+        # Interactive - show spinner
+        local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        local i=0
+        
+        while kill -0 $pid 2>/dev/null; do
+            i=$(( (i+1) %10 ))
+            printf "\r${GREEN}${message} ${spin:$i:1}${NC}"
+            sleep 0.1
+        done
+        printf "\r${GREEN}✓ ${message}${NC}\n"
+    else
+        # Non-interactive - just show message and wait
+        echo -e "${GREEN}>>> ${message}...${NC}"
+        wait $pid
+        echo -e "${GREEN}✓ ${message}${NC}"
+    fi
 }
 
 # Get script directory and source colors
@@ -43,8 +53,24 @@ echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}Docker + AMD GPU Setup for LXC${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
-echo -e "${YELLOW}IMPORTANT: Make sure AMD drivers are installed on the Proxmox HOST first!${NC}"
-echo -e "${YELLOW}Run '003 - install-amd-drivers.sh' on the host if not already done.${NC}"
+
+# Check if AMD drivers are installed on the HOST (not in this container)
+echo -e "${GREEN}>>> Checking host AMD drivers...${NC}"
+if ! nsenter -t 1 -m -- lsmod | grep -q amdgpu; then
+    echo -e "${RED}✗ AMD drivers NOT installed on Proxmox host${NC}"
+    echo ""
+    echo -e "${YELLOW}AMD GPU drivers must be installed on the host first!${NC}"
+    echo -e "${YELLOW}Please run: ${GREEN}003 - install-amd-drivers.sh${YELLOW} on the host${NC}"
+    echo ""
+    read -r -p "Continue anyway? [y/N]: " CONTINUE
+    CONTINUE=${CONTINUE:-N}
+    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+        echo -e "${RED}Installation cancelled.${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✓ AMD drivers detected on host${NC}"
+fi
 echo ""
 
 # Verify GPU is visible
@@ -75,9 +101,8 @@ if [ "$GPU_FOUND" = false ]; then
 fi
 echo ""
 
-# Remove debian-provided packages
-echo -e "${GREEN}>>> Removing old Docker packages...${NC}"
-apt remove -y docker-compose docker docker.io containerd runc 2>/dev/null || true
+# Remove debian-provided packages (silently)
+apt remove -y docker-compose docker docker.io containerd runc >/dev/null 2>&1 || true
 
 # Update package list and upgrade existing packages
 if [ "$VERBOSE" = "1" ]; then
@@ -128,25 +153,31 @@ fi
 echo -e "${GREEN}✓ Docker Engine installed${NC}"
 
 # Start Docker daemon
-systemctl start docker
-systemctl enable docker
+systemctl start docker >/dev/null 2>&1
+systemctl enable docker >/dev/null 2>&1
 
 # Add root user to docker group
-usermod -a -G docker root
+usermod -a -G docker root >/dev/null 2>&1
 
 # Verify Docker installation
-echo -e "${GREEN}>>> Docker version installed:${NC}"
-docker --version
-echo -e "${GREEN}>>> Docker Compose version installed:${NC}"
-docker compose version
-echo -e "${GREEN}>>> Containerd version installed:${NC}"
-containerd --version
-echo -e "${GREEN}>>> Docker installation completed.${NC}"
+if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Docker version installed:${NC}"
+    docker --version
+    echo -e "${GREEN}>>> Docker Compose version installed:${NC}"
+    docker compose version
+    echo -e "${GREEN}>>> Containerd version installed:${NC}"
+    containerd --version
+fi
+echo -e "${GREEN}✓ Docker installation completed${NC}"
 
 # Install docker-compose bash completion
-echo -e "${GREEN}>>> Installing Docker bash completion...${NC}"
-curl -L https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
-    -o /etc/bash_completion.d/docker-compose
+if [ "$VERBOSE" = "1" ]; then
+    curl -L https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
+        -o /etc/bash_completion.d/docker-compose
+else
+    curl -sL https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker \
+        -o /etc/bash_completion.d/docker-compose 2>/dev/null
+fi
 
 echo ""
 echo -e "${GREEN}==========================================${NC}"
@@ -155,24 +186,30 @@ echo -e "${GREEN}==========================================${NC}"
 echo ""
 
 # Add AMD ROCm repository
-echo -e "${GREEN}>>> Adding AMD ROCm repository...${NC}"
 # Add AMD ROCm GPG key
 # Make the directory if it doesn't exist yet.
 # This location is recommended by the distribution maintainers.
-sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+sudo mkdir --parents --mode=0755 /etc/apt/keyrings 2>/dev/null
 
 # Download the key, convert the signing-key to a full
 # keyring required by apt and store in the keyring directory
-wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
-    gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+if [ "$VERBOSE" = "1" ]; then
+    echo -e "${GREEN}>>> Adding AMD ROCm repository...${NC}"
+    wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
+        gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+else
+    wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - 2>/dev/null | \
+        gpg --dearmor 2>/dev/null | sudo tee /etc/apt/keyrings/rocm.gpg >/dev/null 2>&1
+    echo -e "${GREEN}✓ Added AMD ROCm repository${NC}"
+fi
 
 # Add ROCm 7.1.0 repository (Noble/24.04)
-sudo tee /etc/apt/sources.list.d/rocm.list << EOF
+sudo tee /etc/apt/sources.list.d/rocm.list >/dev/null << EOF
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/7.1 noble main
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/graphics/7.1/ubuntu noble main
 EOF
 
-sudo tee /etc/apt/preferences.d/rocm-pin-600 << EOF
+sudo tee /etc/apt/preferences.d/rocm-pin-600 >/dev/null << EOF
 Package: *
 Pin: release o=repo.radeon.com
 Pin-Priority: 600

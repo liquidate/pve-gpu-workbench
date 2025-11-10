@@ -437,7 +437,7 @@ echo -e "${GREEN}>>> Installing dependencies (curl)...${NC}"
 pct exec $CONTAINER_ID -- apt install -y curl >/dev/null 2>&1
 
 echo -e "${GREEN}>>> Installing Ollama...${NC}"
-pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
+pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" 2>&1 | grep -E "Downloading|###|GPU ready|Install complete" || true
 
 echo ""
 echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
@@ -449,10 +449,10 @@ Environment="OLLAMA_HOST=0.0.0.0:11434"
 EOFMARKER'
 
 echo ""
-echo -e "${GREEN}>>> Starting Ollama service...${NC}"
+echo -e "${GREEN}>>> Restarting Ollama with new configuration...${NC}"
 pct exec $CONTAINER_ID -- systemctl daemon-reload
 pct exec $CONTAINER_ID -- systemctl enable ollama 2>/dev/null || true
-pct exec $CONTAINER_ID -- systemctl start ollama 2>/dev/null || true
+pct exec $CONTAINER_ID -- systemctl restart ollama 2>/dev/null || true
 sleep 3
 
 echo -e "${GREEN}✓ Ollama installed and running on 0.0.0.0:11434${NC}"

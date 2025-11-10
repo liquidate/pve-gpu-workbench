@@ -68,6 +68,7 @@ git clone "$REPO_URL" "$INSTALL_DIR"
 # Make all scripts executable
 echo -e "${CYAN}>>> Setting up permissions...${NC}"
 chmod +x "$INSTALL_DIR/guided-install.sh"
+chmod +x "$INSTALL_DIR/update"
 chmod +x "$INSTALL_DIR"/host/*.sh
 
 echo ""

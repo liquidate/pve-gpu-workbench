@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#
+# Update script for Proxmox GPU Setup Scripts
+# Pulls latest changes from GitHub and optionally relaunches guided installer
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+cd "$SCRIPT_DIR"
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  Proxmox Setup - Update              ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo ""
+
+# Check if this is a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo -e "${YELLOW}Not a git repository. Cannot update.${NC}"
+    echo ""
+    echo -e "${CYAN}To reinstall fresh:${NC}"
+    echo "  bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/main/bootstrap.sh)\""
+    echo ""
+    exit 1
+fi
+
+# Show current version
+CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+echo -e "${CYAN}Current version:${NC} $CURRENT_COMMIT"
+echo ""
+
+# Fetch updates
+echo -e "${CYAN}>>> Checking for updates...${NC}"
+git fetch --all
+
+# Check if updates are available
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "$LOCAL")
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    echo -e "${GREEN}✓ Already up to date!${NC}"
+    echo ""
+    NEW_COMMIT="$CURRENT_COMMIT"
+else
+    # Show what will be updated
+    echo -e "${YELLOW}Updates available:${NC}"
+    git log --oneline --decorate --graph HEAD..@{u} | head -5
+    echo ""
+    
+    read -p "Apply updates? [Y/n]: " APPLY
+    APPLY=${APPLY:-Y}
+    
+    if [[ "$APPLY" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${CYAN}>>> Pulling updates...${NC}"
+        git pull
+        
+        # Update permissions
+        chmod +x "$SCRIPT_DIR/guided-install.sh"
+        chmod +x "$SCRIPT_DIR/update"
+        chmod +x "$SCRIPT_DIR"/host/*.sh
+        
+        NEW_COMMIT=$(git rev-parse --short HEAD)
+        
+        echo ""
+        echo -e "${GREEN}✓ Updated successfully!${NC}"
+        echo -e "${CYAN}New version:${NC} $NEW_COMMIT"
+        echo ""
+    else
+        echo "Update cancelled."
+        exit 0
+    fi
+fi
+
+# Offer to launch guided installer
+read -p "Launch guided installer? [Y/n]: " LAUNCH
+LAUNCH=${LAUNCH:-Y}
+
+if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
+    exec bash "$SCRIPT_DIR/guided-install.sh"
+fi
+

@@ -463,6 +463,7 @@ show_main_menu() {
     echo -e "${YELLOW}Commands:${NC}"
     echo "  setup           - Run all GPU Setup scripts (reboot + verify after)"
     echo "  <command>       - Run specific script (e.g., strix-igpu, ollama-amd)"
+    echo "  [u]pdate        - Update scripts from GitHub"
     echo "  [i]nfo          - Show system information"
     echo "  [q]uit          - Exit"
     echo ""
@@ -703,6 +704,17 @@ while true; do
                     echo ""
                 fi
                 
+                read -r -p "Press Enter to continue..." < /dev/tty
+            fi
+            ;;
+            
+        "u"|"update")
+            clear
+            # Run the update script
+            if [ -f "${SCRIPT_DIR}/update" ]; then
+                exec bash "${SCRIPT_DIR}/update"
+            else
+                echo -e "${RED}Update script not found${NC}"
                 read -r -p "Press Enter to continue..." < /dev/tty
             fi
             ;;

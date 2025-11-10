@@ -893,7 +893,7 @@ else
 fi
 echo ""
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}>>> LXC Container Setup and Testing Complete! <<<${NC}"
+echo -e "${GREEN}LXC Container Setup and Testing Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Container ID: $CONTAINER_ID"

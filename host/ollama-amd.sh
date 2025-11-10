@@ -38,9 +38,44 @@ if ! lspci -nn | grep -i "VGA\|3D\|Display" | grep -qi amd; then
 fi
 echo -e "${GREEN}✓ AMD GPU detected${NC}"
 
-# Detect GPU PCI address
+# Ask for setup mode
 echo ""
-echo -e "${GREEN}>>> Detecting GPU PCI address...${NC}"
+echo -e "${YELLOW}Setup Mode:${NC}"
+echo "  [1] Quick   - Use recommended defaults (just set password)"
+echo "  [2] Advanced - Customize all settings"
+echo ""
+read -r -p "Select mode [1]: " SETUP_MODE
+SETUP_MODE=${SETUP_MODE:-1}
+echo ""
+
+QUICK_MODE=false
+if [ "$SETUP_MODE" = "1" ]; then
+    QUICK_MODE=true
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Quick Setup - Recommended Defaults:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "  • Container ID: Next available"
+    echo "  • Network: Auto-detect and configure"
+    echo "  • Storage: Best available (ZFS preferred)"
+    echo "  • Resources: 256GB disk, 16GB RAM, 12 cores, 8GB swap"
+    echo "  • You will only be asked for: Root password"
+    echo ""
+    read -r -p "Proceed with Quick Setup? [Y/n]: " QUICK_CONFIRM
+    QUICK_CONFIRM=${QUICK_CONFIRM:-Y}
+    if [[ ! "$QUICK_CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Switching to Advanced mode..."
+        QUICK_MODE=false
+        echo ""
+    else
+        echo ""
+        echo -e "${GREEN}>>> Setting up container with defaults...${NC}"
+    fi
+fi
+
+# Detect GPU PCI address
+if [ "$QUICK_MODE" = false ]; then
+    echo -e "${GREEN}>>> Detecting GPU PCI address...${NC}"
+fi
 GPU_PCI_PATH=""
 for card in /dev/dri/by-path/pci-*-card; do
     if [ -e "$card" ]; then

@@ -443,10 +443,10 @@ echo ""
 echo -e "${GREEN}>>> Configuring Ollama to listen on all interfaces...${NC}"
 # Create systemd override to set OLLAMA_HOST
 pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
-pct exec $CONTAINER_ID -- bash -c "cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
+pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << "EOFMARKER"
 [Service]
-Environment=\"OLLAMA_HOST=0.0.0.0:11434\"
-EOF"
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOFMARKER'
 
 echo ""
 echo -e "${GREEN}>>> Starting Ollama service...${NC}"

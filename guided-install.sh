@@ -227,6 +227,9 @@ run_script() {
     script_num=$(basename "$script_path" | grep -oP '^\d+')
     script_name=$(basename "$script_path")
     
+    # Clear screen for clean output
+    clear
+    
     # Determine location context
     local location_tag=""
     local location_desc=""

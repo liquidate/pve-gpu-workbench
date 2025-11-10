@@ -63,11 +63,38 @@ fi
 # Find next available container ID
 echo ""
 echo -e "${GREEN}>>> Finding next available container ID...${NC}"
-CONTAINER_ID=100
-while pct status $CONTAINER_ID &>/dev/null; do
-    ((CONTAINER_ID++))
+NEXT_ID=100
+while pct status $NEXT_ID &>/dev/null; do
+    ((NEXT_ID++))
 done
-echo -e "${GREEN}✓ Will use container ID: $CONTAINER_ID${NC}"
+echo -e "${GREEN}✓ Next available ID: $NEXT_ID${NC}"
+echo ""
+
+# Prompt for container ID
+while true; do
+    read -r -p "Enter container ID [$NEXT_ID]: " CONTAINER_ID
+    CONTAINER_ID=${CONTAINER_ID:-$NEXT_ID}
+    
+    # Validate it's a number
+    if ! [[ "$CONTAINER_ID" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}Invalid ID: must be a number${NC}"
+        continue
+    fi
+    
+    # Check if already exists
+    if pct status $CONTAINER_ID &>/dev/null; then
+        echo -e "${RED}Container ID $CONTAINER_ID already exists${NC}"
+        read -r -p "Choose a different ID? [Y/n]: " RETRY
+        RETRY=${RETRY:-Y}
+        if [[ "$RETRY" =~ ^[Yy]$ ]]; then
+            continue
+        else
+            exit 1
+        fi
+    fi
+    
+    break
+done
 
 # Determine hostname
 BASE_HOSTNAME="ollama"

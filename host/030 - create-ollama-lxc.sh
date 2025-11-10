@@ -458,9 +458,23 @@ echo -e "${GREEN}Installing Ollama${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-echo -e "${GREEN}>>> Updating system packages...${NC}"
-pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1
-pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1
+echo -e "${GREEN}>>> Updating system packages (this may take 1-2 minutes)...${NC}"
+pct exec $CONTAINER_ID -- apt update -qq >/dev/null 2>&1 &
+UPDATE_PID=$!
+while kill -0 $UPDATE_PID 2>/dev/null; do
+    echo -n "."
+    sleep 2
+done
+wait $UPDATE_PID
+
+pct exec $CONTAINER_ID -- apt upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" >/dev/null 2>&1 &
+UPGRADE_PID=$!
+while kill -0 $UPGRADE_PID 2>/dev/null; do
+    echo -n "."
+    sleep 2
+done
+wait $UPGRADE_PID
+echo ""
 echo -e "${GREEN}✓ System packages updated${NC}"
 
 echo -e "${GREEN}>>> Installing dependencies...${NC}"

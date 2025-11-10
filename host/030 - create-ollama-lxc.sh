@@ -19,9 +19,9 @@ echo ""
 echo -e "${CYAN}This script will:${NC}"
 echo "  • Create a new GPU-enabled LXC container"
 echo "  • Pass through AMD GPU for hardware acceleration"
-echo "  • Install Ollama natively (fast, no Docker)"
+echo "  • Install Ollama with full GPU support"
 echo "  • Configure systemd service for auto-start"
-echo "  • Test with a small model"
+echo "  • Ready to run AI models locally"
 echo ""
 
 # Check for AMD GPU
@@ -296,7 +296,7 @@ echo "  Type: AMD"
 echo "  PCI: $GPU_PCI_PATH"
 echo ""
 echo -e "${CYAN}Software:${NC}"
-echo "  Ollama: Native installation (no Docker)"
+echo "  Ollama: Latest version"
 echo "  Auto-start: Yes (systemd service)"
 echo ""
 
@@ -366,10 +366,10 @@ else
     exit 1
 fi
 
-# Install Ollama natively
+# Install Ollama
 echo ""
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Installing Ollama (Native)${NC}"
+echo -e "${GREEN}Installing Ollama${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 

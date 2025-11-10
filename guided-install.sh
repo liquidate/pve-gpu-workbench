@@ -385,16 +385,23 @@ while true; do
             fi
             ;;
             
-        [0-9][0-9][0-9])
-            # Run specific script
-            script_path=$(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "${choice} - *.sh" -type f)
+        [0-9]|[0-9][0-9]|[0-9][0-9][0-9])
+            # Run specific script - pad to 3 digits
+            padded_choice=$(printf "%03d" "$choice" 2>/dev/null)
             
-            if [ -z "$script_path" ]; then
-                echo -e "${RED}Script $choice not found!${NC}"
+            if [ -z "$padded_choice" ]; then
+                echo -e "${RED}Invalid script number: $choice${NC}"
                 read -r -p "Press Enter to continue..."
             else
-                run_script "$script_path"
-                read -r -p "Press Enter to continue..."
+                script_path=$(find "${SCRIPT_DIR}/host" -maxdepth 1 -name "${padded_choice} - *.sh" -type f)
+                
+                if [ -z "$script_path" ]; then
+                    echo -e "${RED}Script $padded_choice not found!${NC}"
+                    read -r -p "Press Enter to continue..."
+                else
+                    run_script "$script_path"
+                    read -r -p "Press Enter to continue..."
+                fi
             fi
             ;;
             

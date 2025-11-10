@@ -37,7 +37,7 @@ select_gpu_container() {
         echo -e "${YELLOW}$script_name requires a GPU-enabled container.${NC}"
         echo ""
         echo "Options:"
-        echo "  1) Create one now (run script 031)"
+        echo "  1) Create one now (run script 030)"
         echo "  2) Exit and create manually"
         echo ""
         read -r -p "Enter choice [1]: " CHOICE
@@ -46,7 +46,7 @@ select_gpu_container() {
             echo ""
             echo -e "${GREEN}>>> Running container creation script...${NC}"
             SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-            bash "${SCRIPT_DIR}/../host/031 - create-gpu-lxc.sh"
+            bash "${SCRIPT_DIR}/../host/030 - create-gpu-lxc.sh"
             
             # Re-detect after creation
             GPU_CONTAINERS=$(detect_gpu_containers)
@@ -58,7 +58,7 @@ select_gpu_container() {
             # Use the newly created container
             container_id=$(echo "$GPU_CONTAINERS" | tail -n1)
         else
-            echo "Exiting. Run script 031 first, then run this script again."
+            echo "Exiting. Run script 030 first, then run this script again."
             exit 0
         fi
         

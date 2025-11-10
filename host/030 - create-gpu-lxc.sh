@@ -957,25 +957,25 @@ if [ "$INSTALL_PORTAINER" = true ] || [ "$INSTALL_OLLAMA" = true ] || [ "$INSTAL
     
     if [ "$INSTALL_PORTAINER" = true ]; then
         echo -e "${CYAN}=== Installing Portainer ===${NC}"
-        bash "${SCRIPT_DIR}/032 - install-portainer.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Portainer installation had issues${NC}"
+        bash "${SCRIPT_DIR}/031 - install-portainer.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Portainer installation had issues${NC}"
         echo ""
     fi
     
     if [ "$INSTALL_OLLAMA" = true ]; then
         echo -e "${CYAN}=== Installing Ollama ===${NC}"
-        bash "${SCRIPT_DIR}/033 - install-ollama.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Ollama installation had issues${NC}"
+        bash "${SCRIPT_DIR}/032 - install-ollama.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Ollama installation had issues${NC}"
         echo ""
     fi
     
     if [ "$INSTALL_OPENWEBUI" = true ]; then
         echo -e "${CYAN}=== Installing Open WebUI ===${NC}"
-        bash "${SCRIPT_DIR}/034 - install-open-webui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Open WebUI installation had issues${NC}"
+        bash "${SCRIPT_DIR}/033 - install-open-webui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  Open WebUI installation had issues${NC}"
         echo ""
     fi
     
     if [ "$INSTALL_COMFYUI" = true ]; then
         echo -e "${CYAN}=== Installing ComfyUI ===${NC}"
-        bash "${SCRIPT_DIR}/035 - install-comfyui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  ComfyUI installation had issues${NC}"
+        bash "${SCRIPT_DIR}/034 - install-comfyui.sh" "$CONTAINER_ID" || echo -e "${YELLOW}⚠️  ComfyUI installation had issues${NC}"
         echo ""
     fi
     
@@ -1003,7 +1003,7 @@ if [ "$INSTALL_PORTAINER" = true ] || [ "$INSTALL_OLLAMA" = true ] || [ "$INSTAL
 else
     echo ""
     echo -e "${CYAN}You can install add-ons later by running:${NC}"
-    echo "  ./guided-install.sh → Choose 032-035"
+    echo "  ./guided-install.sh → Choose 031-034"
     echo ""
 fi
 

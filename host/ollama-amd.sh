@@ -579,7 +579,7 @@ show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
         wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
         echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
         apt update -qq
-        apt install -y rocm-smi radeontop
+        apt install -y rocm-smi rocminfo radeontop
     "
     
     # Install Ollama
@@ -854,13 +854,15 @@ show_progress 9 9 "Verifying GPU in container"
 echo "" >> "$LOG_FILE" 2>&1
 echo "═══ Running GPU Verification ═══" >> "$LOG_FILE" 2>&1
 
-if pct exec $CONTAINER_ID -- gpu-verify >> "$LOG_FILE" 2>&1; then
+# Use full path and give container a moment to sync filesystem
+sleep 2
+if pct exec $CONTAINER_ID -- /usr/local/bin/gpu-verify >> "$LOG_FILE" 2>&1; then
     complete_progress "GPU verified and working in container"
 else
     echo ""
     echo -e "${YELLOW}⚠ GPU verification had some failures${NC}"
     echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
-    echo -e "${YELLOW}  Or run inside container: pct exec $CONTAINER_ID gpu-verify${NC}"
+    echo -e "${YELLOW}  Or run inside container: pct exec $CONTAINER_ID /usr/local/bin/gpu-verify${NC}"
     echo ""
 fi
 

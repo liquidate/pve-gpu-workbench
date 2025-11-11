@@ -250,7 +250,7 @@ MIT License - See LICENSE file for details
 
 ## Acknowledgments
 
-- **tteck** - Original creator of the Proxmox Helper Scripts that inspired this project
+- **jammsen** - Original author of [proxmox-setup-scripts](https://github.com/jammsen/proxmox-setup-scripts)
 - Proxmox VE team
 - AMD ROCm team
 - Proxmox Community Scripts project

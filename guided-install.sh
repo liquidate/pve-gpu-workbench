@@ -476,8 +476,6 @@ show_main_menu() {
     echo "  [i]nfo          - Show system information"
     echo "  [q]uit          - Exit"
     echo ""
-    echo -e "${DIM}Tip: Press TAB for command completion${NC}"
-    echo ""
 }
 
 # Function to show detailed system information

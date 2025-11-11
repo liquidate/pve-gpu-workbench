@@ -792,6 +792,9 @@ fi
 GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
 [ -n "$GPU_MODEL" ] && GPU_VERIFY_DETAILS="$GPU_MODEL" || GPU_VERIFY_DETAILS="AMD GPU"
 
+# Pause to let user read the final step
+sleep 3
+
 # Clear screen and show completion message
 clear
 echo ""

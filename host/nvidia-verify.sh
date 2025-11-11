@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Verify NVIDIA driver installation
-# SCRIPT_DETECT: command -v nvidia-smi &>/dev/null
+# SCRIPT_DETECT: false
 
 # Verify NVIDIA driver installation
 # This script checks if NVIDIA drivers and tools are properly installed and accessible

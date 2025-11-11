@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Comprehensive AMD GPU setup verification
-# SCRIPT_DETECT: lsmod | grep -q amdgpu
+# SCRIPT_DETECT: false
 
 # Comprehensive AMD GPU Verification
 # This script checks ALL aspects of AMD GPU setup:

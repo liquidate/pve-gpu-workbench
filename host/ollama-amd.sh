@@ -368,15 +368,15 @@ TEMPLATE_NAME="ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
 TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE_NAME"
 
 if [ ! -f "$TEMPLATE_PATH" ]; then
-    echo -e "${YELLOW}Ubuntu 24.04 template not found, downloading...${NC}"
-    echo ""
-    if ! pveam download local "$TEMPLATE_NAME"; then
-        echo -e "${RED}Failed to download template${NC}"
+    echo -e "${YELLOW}Downloading Ubuntu 24.04 template (~135MB)...${NC}"
+    if pveam download local "$TEMPLATE_NAME" >> "$LOG_FILE" 2>&1; then
+        echo -e "${GREEN}✓ Template downloaded${NC}"
+        echo ""
+    else
+        echo -e "${RED}✗ Failed to download template${NC}"
+        echo -e "${YELLOW}Check log: $LOG_FILE${NC}"
         exit 1
     fi
-    echo ""
-    echo -e "${GREEN}✓ Template downloaded${NC}"
-    echo ""
 fi
 
 # Create LXC container

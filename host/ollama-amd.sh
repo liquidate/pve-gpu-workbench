@@ -856,15 +856,30 @@ echo "═══ Running GPU Verification ═══" >> "$LOG_FILE" 2>&1
 
 # Use full path and give container a moment to sync filesystem
 sleep 2
-if pct exec $CONTAINER_ID -- /usr/local/bin/gpu-verify >> "$LOG_FILE" 2>&1; then
+
+# Capture GPU verification output
+GPU_VERIFY_OUTPUT=$(pct exec $CONTAINER_ID -- /usr/local/bin/gpu-verify 2>&1)
+GPU_VERIFY_EXIT=$?
+
+# Log the output
+echo "$GPU_VERIFY_OUTPUT" >> "$LOG_FILE" 2>&1
+
+# Parse results for summary
+GPU_CHECKS_PASSED=$(echo "$GPU_VERIFY_OUTPUT" | grep -oP '\d+/\d+ passed' | head -1)
+GPU_MODEL=$(echo "$GPU_VERIFY_OUTPUT" | grep -i "Card series\|Card model" | head -1 | sed 's/.*: *//' | xargs)
+GPU_STATUS=""
+
+if [ $GPU_VERIFY_EXIT -eq 0 ]; then
     complete_progress "GPU verified and working in container"
+    GPU_STATUS="✓ ALL CHECKS PASSED"
 else
-    echo ""
-    echo -e "${YELLOW}⚠ GPU verification had some failures${NC}"
-    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
-    echo -e "${YELLOW}  Or run inside container: pct exec $CONTAINER_ID /usr/local/bin/gpu-verify${NC}"
-    echo ""
+    complete_progress "GPU verification completed (some checks failed)"
+    GPU_STATUS="⚠ SOME CHECKS FAILED"
 fi
+
+# Store for display in completion message
+GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
+[ -n "$GPU_MODEL" ] && GPU_VERIFY_DETAILS="$GPU_MODEL" || GPU_VERIFY_DETAILS="AMD GPU"
 
 # Clear screen and show completion message
 clear
@@ -880,6 +895,20 @@ echo -e "   Hostname:     ${GREEN}$HOSTNAME${NC}"
 echo -e "   IP Address:   ${GREEN}$IP_ADDRESS${NC}"
 echo -e "   Container ID: ${GREEN}$CONTAINER_ID${NC}"
 echo -e "   Ollama API:   ${GREEN}http://$IP_ADDRESS:11434${NC}"
+echo ""
+
+# Display GPU verification results
+if [ $GPU_VERIFY_EXIT -eq 0 ]; then
+    echo -e "${CYAN}🎮 GPU Status:${NC} ${GREEN}$GPU_VERIFY_SUMMARY${NC}"
+    echo -e "   ${GREEN}$GPU_VERIFY_DETAILS${NC}"
+    echo -e "   ${GREEN}✓${NC} Device files accessible"
+    echo -e "   ${GREEN}✓${NC} ROCm tools functional"
+    echo -e "   ${GREEN}✓${NC} Ollama service running"
+else
+    echo -e "${CYAN}🎮 GPU Status:${NC} ${YELLOW}$GPU_VERIFY_SUMMARY${NC}"
+    echo -e "   ${DIM}Run 'pct exec $CONTAINER_ID /usr/local/bin/gpu-verify' for details${NC}"
+fi
+
 echo ""
 echo -e "${CYAN}📄 Installation Log:${NC} ${GREEN}$LOG_FILE${NC}"
 

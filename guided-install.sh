@@ -473,6 +473,8 @@ show_main_menu() {
     echo "  [i]nfo          - Show system information"
     echo "  [q]uit          - Exit"
     echo ""
+    echo -e "${DIM}Tip: Press TAB for command completion${NC}"
+    echo ""
 }
 
 # Function to show detailed system information
@@ -693,11 +695,31 @@ confirm_run_with_info() {
 discover_scripts
 detect_gpus
 
+# Set up tab completion for interactive mode
+setup_completion() {
+    # Build list of all valid commands
+    local commands="setup update info quit"
+    
+    # Add all script commands
+    for cmd in "${SCRIPT_COMMANDS[@]}"; do
+        commands="$commands $cmd"
+    done
+    
+    # Set up bash completion
+    complete -W "$commands" choice 2>/dev/null || true
+}
+
+# Only set up completion if running interactively
+if [ -t 0 ]; then
+    setup_completion
+fi
+
 # Main loop
 while true; do
     show_main_menu
     
-    read -r -p "Enter your choice [setup]: " choice
+    # Use read -e for readline support (enables tab completion)
+    read -e -r -p "Enter your choice [setup]: " choice
     choice=${choice:-setup}  # Default to "setup"
     choice=${choice,,}  # Convert to lowercase
     

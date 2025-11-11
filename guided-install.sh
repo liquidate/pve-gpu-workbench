@@ -478,49 +478,136 @@ show_main_menu() {
 # Function to show detailed system information
 show_system_info() {
     clear
-    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║        System Information            ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║              System Information Dashboard                    ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    # GPU Information
-    echo -e "${CYAN}═══ GPU INFORMATION ═══${NC}"
+    # Script Version & System Info
+    echo -e "${CYAN}═══ SCRIPT VERSION ═══${NC}"
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        local git_branch=$(cd "$SCRIPT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        local git_commit=$(cd "$SCRIPT_DIR" && git rev-parse --short HEAD 2>/dev/null)
+        local git_date=$(cd "$SCRIPT_DIR" && git log -1 --format=%cd --date=short 2>/dev/null)
+        echo -e "  ${GREEN}Branch:${NC} $git_branch"
+        echo -e "  ${GREEN}Commit:${NC} $git_commit ($git_date)"
+    else
+        echo -e "  ${DIM}Git repository not found${NC}"
+    fi
+    
+    echo ""
+    echo -e "${CYAN}═══ SYSTEM VERSION ═══${NC}"
+    echo -e "  ${GREEN}Proxmox VE:${NC} $(pveversion | head -n1 | awk '{print $2}')"
+    echo -e "  ${GREEN}Kernel:${NC} $(uname -r)"
+    
+    echo ""
+    
+    # GPU Setup Status Summary
+    echo -e "${CYAN}═══ GPU SETUP STATUS ═══${NC}"
     if [ "$HAS_AMD_GPU" = true ]; then
         echo -e "${GREEN}AMD GPU:${NC}"
-        lspci | grep -i "VGA.*AMD\|Display.*AMD" | sed 's/^/  /'
-        if command -v rocm-smi &>/dev/null || [ -d "/opt/rocm" ]; then
-            echo ""
-            echo -e "${GREEN}ROCm:${NC}"
-            if [ -f "/opt/rocm/.info/version" ]; then
-                echo -e "  Version: $(cat /opt/rocm/.info/version)"
+        lspci | grep -i "VGA.*AMD\|Display.*AMD" | head -1 | sed 's/^/  /'
+        
+        # Quick health check
+        local gpu_status="${RED}✗ Not configured${NC}"
+        if lsmod | grep -q amdgpu && [ -e /dev/kfd ]; then
+            if command -v rocm-smi &>/dev/null && rocm-smi --showproductname 2>&1 | grep -qi "GPU"; then
+                gpu_status="${GREEN}✓ Working${NC}"
             else
-                rocm-smi --version 2>/dev/null | grep -i "ROCM-SMI-LIB version" | sed 's/ROCM-SMI-LIB version: /  Version: /' || echo "  Not detected"
+                gpu_status="${YELLOW}⚠ Partially configured${NC}"
             fi
+        elif [ -d "/opt/rocm" ]; then
+            gpu_status="${YELLOW}⚠ Reboot needed${NC}"
+        fi
+        echo -e "  ${GREEN}Status:${NC} $gpu_status"
+        
+        # ROCm version
+        if [ -f "/opt/rocm/.info/version" ]; then
+            echo -e "  ${GREEN}ROCm:${NC} $(cat /opt/rocm/.info/version)"
+        elif command -v rocm-smi &>/dev/null; then
+            local rocm_ver=$(rocm-smi --version 2>/dev/null | grep -oP "ROCM-SMI-LIB version: \K[0-9.]+")
+            [ -n "$rocm_ver" ] && echo -e "  ${GREEN}ROCm:${NC} $rocm_ver" || echo -e "  ${DIM}ROCm: Not installed${NC}"
+        else
+            echo -e "  ${DIM}ROCm: Not installed${NC}"
+        fi
+        
+        # iGPU VRAM allocation
+        if grep -q "amdgpu.gttsize=" /proc/cmdline 2>/dev/null; then
+            local gtt_size=$(grep -oP 'amdgpu.gttsize=\K[0-9]+' /proc/cmdline)
+            local gtt_gb=$((gtt_size / 1024))
+            echo -e "  ${GREEN}VRAM (iGPU):${NC} ${gtt_gb}GB allocated"
+        else
+            echo -e "  ${DIM}VRAM (iGPU): Not configured${NC}"
         fi
     fi
+    
     if [ "$HAS_NVIDIA_GPU" = true ]; then
         echo ""
         echo -e "${GREEN}NVIDIA GPU:${NC}"
-        lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | sed 's/^/  /'
+        lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | sed 's/^/  /'
+        
+        # Quick health check
+        local gpu_status="${RED}✗ Not configured${NC}"
         if command -v nvidia-smi &>/dev/null; then
-            echo ""
-            echo -e "${GREEN}CUDA:${NC}"
-            nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | sed 's/^/  Driver: /' || echo "  Not detected"
+            if nvidia-smi &>/dev/null; then
+                gpu_status="${GREEN}✓ Working${NC}"
+            else
+                gpu_status="${YELLOW}⚠ Driver issue${NC}"
+            fi
+        fi
+        echo -e "  ${GREEN}Status:${NC} $gpu_status"
+        
+        if command -v nvidia-smi &>/dev/null; then
+            local cuda_ver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null)
+            [ -n "$cuda_ver" ] && echo -e "  ${GREEN}Driver:${NC} $cuda_ver"
+        else
+            echo -e "  ${DIM}Driver: Not installed${NC}"
         fi
     fi
+    
+    if [ "$HAS_AMD_GPU" = false ] && [ "$HAS_NVIDIA_GPU" = false ]; then
+        echo -e "  ${DIM}No AMD or NVIDIA GPU detected${NC}"
+    fi
+    
     echo ""
     
     # System Resources
     echo -e "${CYAN}═══ SYSTEM RESOURCES ═══${NC}"
     echo -e "${GREEN}CPU:${NC}"
     lscpu | grep "Model name" | sed 's/Model name: */  /'
-    echo -e "${GREEN}Cores:${NC} $(nproc) cores"
+    echo -e "  $(nproc) cores"
     
     echo -e "${GREEN}Memory:${NC}"
-    free -h | awk '/^Mem:/ {printf "  Total: %s  |  Used: %s  |  Free: %s\n", $2, $3, $4}'
+    free -h | awk '/^Mem:/ {printf "  Total: %s  |  Used: %s  |  Available: %s\n", $2, $3, $7}'
     
-    echo -e "${GREEN}Storage:${NC}"
-    df -h / | awk 'NR==2 {printf "  Root: %s total, %s used, %s free (%s used)\n", $2, $3, $4, $5}'
+    echo -e "${GREEN}Storage Pools:${NC}"
+    if command -v pvesm &>/dev/null; then
+        pvesm status | tail -n +2 | awk '{
+            total=$5;
+            used=$6;
+            avail=$4;
+            if (total > 0) {
+                used_pct = (used / total) * 100;
+                printf "  %-15s %8.1f GB used / %8.1f GB total (%5.1f%%)\n", $1":", used/1024/1024, total/1024/1024, used_pct;
+            }
+        }'
+    else
+        df -h / | awk 'NR==2 {printf "  Root: %s total, %s used, %s free (%s)\n", $2, $3, $4, $5}'
+    fi
+    
+    echo ""
+    
+    # Network Configuration
+    echo -e "${CYAN}═══ NETWORK CONFIGURATION ═══${NC}"
+    echo -e "${GREEN}Network Bridges:${NC}"
+    ip -br link show type bridge 2>/dev/null | awk '{
+        status = ($2 == "UP") ? "UP" : "DOWN";
+        printf "  %-10s %s\n", $1, status;
+    }'
+    
+    echo -e "${GREEN}Host IP Addresses:${NC}"
+    ip -4 -br addr show | grep -v "^lo" | awk '{printf "  %-15s %s\n", $1":", $3}'
+    
     echo ""
     
     # LXC Containers
@@ -528,16 +615,29 @@ show_system_info() {
     local container_count
     container_count=$(pct list 2>/dev/null | tail -n +2 | wc -l)
     if [ "$container_count" -gt 0 ]; then
-        echo -e "${GREEN}Running Containers:${NC}"
-        pct list | tail -n +2 | awk '{printf "  [%s] %s - %s\n", $1, $3, $2}'
+        pct list | tail -n +2 | while read -r line; do
+            local vmid=$(echo "$line" | awk '{print $1}')
+            local status=$(echo "$line" | awk '{print $2}')
+            local name=$(echo "$line" | awk '{print $3}')
+            
+            # Get IP address if container is running
+            local ip_addr="N/A"
+            if [ "$status" = "running" ]; then
+                ip_addr=$(pct exec "$vmid" -- ip -4 -br addr show 2>/dev/null | grep -v "^lo" | awk '{print $3}' | head -1 | cut -d'/' -f1)
+                [ -z "$ip_addr" ] && ip_addr="acquiring..."
+                status="${GREEN}running${NC}"
+            else
+                status="${DIM}stopped${NC}"
+            fi
+            
+            printf "  ${GREEN}[%-3s]${NC} %-20s %s  ${CYAN}%s${NC}\n" "$vmid" "$name" "$status" "$ip_addr"
+        done
     else
-        echo -e "${DIM}  No containers found${NC}"
+        echo -e "  ${DIM}No containers found${NC}"
     fi
-    echo ""
     
-    # Network
-    echo -e "${CYAN}═══ NETWORK ═══${NC}"
-    ip -br addr show | grep -v "^lo" | awk '{printf "  %s: %s\n", $1, $3}'
+    echo ""
+    echo -e "${DIM}Tip: Run 'amd-verify' or 'nvidia-verify' for detailed GPU diagnostics${NC}"
     echo ""
     
     read -r -p "Press Enter to return to main menu..." < /dev/tty

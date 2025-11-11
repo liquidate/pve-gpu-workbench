@@ -51,6 +51,11 @@ echo ""
 QUICK_MODE=false
 LOG_FILE="/tmp/ollama-lxc-install-$(date +%Y%m%d-%H%M%S).log"
 
+# Clean up old log files (keep only the 5 most recent)
+if ls /tmp/ollama-lxc-install-*.log 1> /dev/null 2>&1; then
+    ls -t /tmp/ollama-lxc-install-*.log | tail -n +6 | xargs -r rm -f
+fi
+
 # Initialize log file for both modes
 echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
 

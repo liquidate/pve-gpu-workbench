@@ -307,6 +307,8 @@ declare -A STORAGE_INFO
 INDEX=1
 
 # Build a list of storage pools that support rootdir content (containers)
+# Store as: index|name|available_kb
+declare -a STORAGE_LIST
 while IFS= read -r line; do
     name=$(echo "$line" | awk '{print $1}')
     type=$(echo "$line" | awk '{print $2}')
@@ -315,32 +317,32 @@ while IFS= read -r line; do
     # Check if this storage supports container content (rootdir)
     # Parse /etc/pve/storage.cfg to check content types
     if grep -A 10 "^${type}: ${name}$" /etc/pve/storage.cfg 2>/dev/null | grep -q "content.*rootdir"; then
-        STORAGE_NAMES[$INDEX]=$name
-        STORAGE_INFO[$name]=$avail
-        if [ "$QUICK_MODE" = false ]; then
-            # Convert KB to GB for display (pvesm shows KB)
-            avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
-            printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
-        fi
+        STORAGE_LIST+=("${INDEX}|${name}|${avail}")
         ((INDEX++))
     fi
 done < <(pvesm status | tail -n +2)
 
-if [ ${#STORAGE_NAMES[@]} -eq 0 ]; then
+if [ ${#STORAGE_LIST[@]} -eq 0 ]; then
     echo -e "${RED}No suitable storage found${NC}"
+    echo -e "${YELLOW}Make sure you have storage configured with 'rootdir' content type${NC}"
     exit 1
 fi
 
-# Default to local-zfs, then local-lvm, then first available
-DEFAULT_STORAGE_NUM=1
-for i in "${!STORAGE_NAMES[@]}"; do
-    if [ "${STORAGE_NAMES[$i]}" = "local-zfs" ]; then
-        DEFAULT_STORAGE_NUM=$i
-        break
-    elif [ "${STORAGE_NAMES[$i]}" = "local-lvm" ]; then
-        DEFAULT_STORAGE_NUM=$i
+# Sort storage by available space (descending) and populate arrays
+INDEX=1
+while IFS='|' read -r _ name avail; do
+    STORAGE_NAMES[$INDEX]=$name
+    STORAGE_INFO[$name]=$avail
+    if [ "$QUICK_MODE" = false ]; then
+        # Convert KB to GB for display (pvesm shows KB)
+        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
+        printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
     fi
-done
+    ((INDEX++))
+done < <(printf '%s\n' "${STORAGE_LIST[@]}" | sort -t'|' -k3 -rn)
+
+# Default to first in list (largest available space)
+DEFAULT_STORAGE_NUM=1
 
 if [ "$QUICK_MODE" = true ]; then
     STORAGE="${STORAGE_NAMES[$DEFAULT_STORAGE_NUM]}"

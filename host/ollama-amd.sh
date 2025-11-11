@@ -449,7 +449,7 @@ if [ "$QUICK_MODE" = false ]; then
 fi
 
 # Create LXC container
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 
 # Clear screen and show header for installation phase
 clear
@@ -685,6 +685,185 @@ fi
 UPDATEEOF
 chmod +x /usr/local/bin/update' >> "$LOG_FILE" 2>&1
 
+# Create gpu-verify command inside the container
+pct exec $CONTAINER_ID -- bash -c 'cat > /usr/local/bin/gpu-verify << '\''GPUVERIFYEOF'\''
+#!/usr/bin/env bash
+#
+# GPU Verification for LXC Container
+# Checks if AMD GPU is accessible and functional
+#
+
+GREEN='\''\033[0;32m'\''
+RED='\''\033[0;31m'\''
+YELLOW='\''\033[1;33m'\''
+CYAN='\''\033[0;36m'\''
+NC='\''\033[0m'\''
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║         GPU Verification - LXC Container                     ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Track results
+CHECKS_PASSED=0
+CHECKS_TOTAL=0
+
+check_result() {
+    local status=$1
+    local message=$2
+    ((CHECKS_TOTAL++))
+    if [ "$status" -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} $message"
+        ((CHECKS_PASSED++))
+    else
+        echo -e "${RED}✗${NC} $message"
+    fi
+}
+
+echo -e "${CYAN}═══ GPU DEVICE FILES ═══${NC}"
+
+# Check for DRI devices
+if [ -e /dev/dri/card0 ]; then
+    check_result 0 "/dev/dri/card0 present"
+else
+    check_result 1 "/dev/dri/card0 missing"
+fi
+
+if [ -e /dev/dri/renderD128 ]; then
+    check_result 0 "/dev/dri/renderD128 present"
+else
+    check_result 1 "/dev/dri/renderD128 missing"
+fi
+
+# Check for KFD (ROCm compute interface)
+if [ -e /dev/kfd ]; then
+    check_result 0 "/dev/kfd present (ROCm compute interface)"
+else
+    check_result 1 "/dev/kfd missing (ROCm compute unavailable)"
+fi
+
+# Check permissions
+if [ -r /dev/dri/card0 ] && [ -w /dev/dri/card0 ]; then
+    check_result 0 "/dev/dri/card0 has read/write permissions"
+else
+    check_result 1 "/dev/dri/card0 lacks read/write permissions"
+fi
+
+if [ -r /dev/kfd ] && [ -w /dev/kfd ]; then
+    check_result 0 "/dev/kfd has read/write permissions"
+else
+    check_result 1 "/dev/kfd lacks read/write permissions"
+fi
+
+echo ""
+echo -e "${CYAN}═══ ROCM TOOLS ═══${NC}"
+
+# Check for ROCm tools
+if command -v rocm-smi >/dev/null 2>&1; then
+    check_result 0 "rocm-smi installed"
+else
+    check_result 1 "rocm-smi not installed"
+fi
+
+if command -v rocminfo >/dev/null 2>&1; then
+    check_result 0 "rocminfo installed"
+else
+    check_result 1 "rocminfo not installed"
+fi
+
+echo ""
+echo -e "${CYAN}═══ GPU DETECTION ═══${NC}"
+
+# Test rocm-smi
+if command -v rocm-smi >/dev/null 2>&1; then
+    if rocm-smi --showproductname 2>&1 | grep -qi "GPU"; then
+        check_result 0 "rocm-smi detects GPU"
+        echo -e "${CYAN}GPU Info:${NC}"
+        rocm-smi --showproductname 2>&1 | grep -i GPU | sed '\''s/^/  /'\''
+    else
+        check_result 1 "rocm-smi does NOT detect GPU"
+    fi
+else
+    check_result 1 "rocm-smi not available"
+fi
+
+# Test rocminfo
+if command -v rocminfo >/dev/null 2>&1; then
+    if rocminfo 2>/dev/null | grep -qi "Agent [0-9]"; then
+        check_result 0 "rocminfo detects GPU agents"
+        echo -e "${CYAN}Detected Agents:${NC}"
+        rocminfo 2>/dev/null | grep -i -A3 '\''Agent [0-9]'\'' | head -20 | sed '\''s/^/  /'\''
+    else
+        check_result 1 "rocminfo does NOT detect GPU agents"
+    fi
+else
+    check_result 1 "rocminfo not available"
+fi
+
+echo ""
+echo -e "${CYAN}═══ OLLAMA GPU STATUS ═══${NC}"
+
+# Check if Ollama is installed and can see GPU
+if command -v ollama >/dev/null 2>&1; then
+    check_result 0 "Ollama installed"
+    
+    # Check if Ollama service is running
+    if systemctl is-active --quiet ollama 2>/dev/null; then
+        check_result 0 "Ollama service running"
+        
+        # Try to get GPU info from Ollama (it shows GPU info in logs/ps output)
+        if pgrep -f ollama >/dev/null && ollama list >/dev/null 2>&1; then
+            check_result 0 "Ollama responding to commands"
+        else
+            check_result 1 "Ollama not responding"
+        fi
+    else
+        check_result 1 "Ollama service not running"
+    fi
+else
+    echo -e "  ${YELLOW}Ollama not installed (skipping)${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+if [ "$CHECKS_PASSED" -eq "$CHECKS_TOTAL" ]; then
+    echo -e "${GREEN}✓ ALL CHECKS PASSED ($CHECKS_PASSED/$CHECKS_TOTAL)${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${CYAN}GPU is fully functional in this container!${NC}"
+    echo ""
+    exit 0
+else
+    echo -e "${YELLOW}⚠ SOME CHECKS FAILED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}Troubleshooting:${NC}"
+    echo "  1. Verify host GPU setup: Run '\''amd-verify'\'' on the host"
+    echo "  2. Check LXC config: cat /etc/pve/lxc/${HOSTNAME}.conf"
+    echo "  3. Restart container: pct restart <VMID>"
+    echo "  4. Check host GPU: lspci | grep -i amd"
+    echo ""
+    exit 1
+fi
+GPUVERIFYEOF
+chmod +x /usr/local/bin/gpu-verify' >> "$LOG_FILE" 2>&1
+
+# Run GPU verification
+show_progress 9 9 "Verifying GPU in container"
+echo "" >> "$LOG_FILE" 2>&1
+echo "═══ Running GPU Verification ═══" >> "$LOG_FILE" 2>&1
+
+if pct exec $CONTAINER_ID -- gpu-verify >> "$LOG_FILE" 2>&1; then
+    complete_progress "GPU verified and working in container"
+else
+    echo ""
+    echo -e "${YELLOW}⚠ GPU verification had some failures${NC}"
+    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
+    echo -e "${YELLOW}  Or run inside container: pct exec $CONTAINER_ID gpu-verify${NC}"
+    echo ""
+fi
+
 # Clear screen and show completion message
 clear
 echo ""
@@ -733,6 +912,10 @@ echo ""
 echo -e "${CYAN}🔄 Update Ollama (when new versions are released):${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
 echo -e "   ${GREEN}update${NC}"
+echo ""
+echo -e "${CYAN}🔍 Verify GPU (troubleshoot GPU issues):${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo -e "   ${GREEN}gpu-verify${NC}"
 echo ""
 echo -e "${CYAN}📊 Alternative GPU Monitor:${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"

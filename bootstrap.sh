@@ -3,12 +3,13 @@
 # Proxmox GPU Setup Scripts - Bootstrap Installer
 # 
 # Usage:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/main/bootstrap.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/feature/gpu-detection-improvements/bootstrap.sh)"
 #
 
 set -e
 
 REPO_URL="https://github.com/liquidate/proxmox-setup-scripts.git"
+REPO_BRANCH="feature/gpu-detection-improvements"
 INSTALL_DIR="/root/proxmox-setup-scripts"
 
 # Colors for output
@@ -33,7 +34,9 @@ if [ -d "$INSTALL_DIR" ]; then
     if [[ "$UPDATE" =~ ^[Yy]$ ]]; then
         echo -e "${CYAN}>>> Updating existing installation...${NC}"
         cd "$INSTALL_DIR"
-        git pull
+        git fetch origin
+        git checkout "$REPO_BRANCH"
+        git pull origin "$REPO_BRANCH"
         echo ""
         echo -e "${GREEN}✓ Updated successfully!${NC}"
         echo ""
@@ -77,7 +80,7 @@ fi
 # Clone the repository
 echo ""
 echo -e "${CYAN}>>> Cloning repository...${NC}"
-git clone "$REPO_URL" "$INSTALL_DIR"
+git clone -b "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
 
 # Make all scripts executable
 echo -e "${CYAN}>>> Setting up permissions...${NC}"

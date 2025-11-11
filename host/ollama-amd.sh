@@ -305,13 +305,16 @@ fi
 declare -a STORAGE_NAMES
 declare -A STORAGE_INFO
 INDEX=1
+
+# Build a list of storage pools that support rootdir content (containers)
 while IFS= read -r line; do
     name=$(echo "$line" | awk '{print $1}')
     type=$(echo "$line" | awk '{print $2}')
     avail=$(echo "$line" | awk '{print $4}')
     
-    # Only show container-compatible storage
-    if [[ "$type" =~ ^(dir|zfspool|lvm|lvmthin|btrfs)$ ]]; then
+    # Check if this storage supports container content (rootdir)
+    # Parse /etc/pve/storage.cfg to check content types
+    if grep -A 10 "^${type}: ${name}$" /etc/pve/storage.cfg 2>/dev/null | grep -q "content.*rootdir"; then
         STORAGE_NAMES[$INDEX]=$name
         STORAGE_INFO[$name]=$avail
         if [ "$QUICK_MODE" = false ]; then
@@ -328,12 +331,14 @@ if [ ${#STORAGE_NAMES[@]} -eq 0 ]; then
     exit 1
 fi
 
-# Default to local-zfs or first available
+# Default to local-zfs, then local-lvm, then first available
 DEFAULT_STORAGE_NUM=1
 for i in "${!STORAGE_NAMES[@]}"; do
     if [ "${STORAGE_NAMES[$i]}" = "local-zfs" ]; then
         DEFAULT_STORAGE_NUM=$i
         break
+    elif [ "${STORAGE_NAMES[$i]}" = "local-lvm" ]; then
+        DEFAULT_STORAGE_NUM=$i
     fi
 done
 

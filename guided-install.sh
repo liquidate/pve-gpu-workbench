@@ -497,7 +497,7 @@ show_system_info() {
     
     echo ""
     echo -e "${CYAN}═══ SYSTEM VERSION ═══${NC}"
-    echo -e "  ${GREEN}Proxmox VE:${NC} $(pveversion | head -n1 | awk '{print $2}')"
+    echo -e "  ${GREEN}Proxmox VE:${NC} $(pveversion | head -n1 | cut -d'/' -f2)"
     echo -e "  ${GREEN}Kernel:${NC} $(uname -r)"
     
     echo ""
@@ -505,8 +505,9 @@ show_system_info() {
     # GPU Setup Status Summary
     echo -e "${CYAN}═══ GPU SETUP STATUS ═══${NC}"
     if [ "$HAS_AMD_GPU" = true ]; then
-        echo -e "${GREEN}AMD GPU:${NC}"
-        lspci | grep -i "VGA.*AMD\|Display.*AMD" | head -1 | sed 's/^/  /'
+        # Extract clean GPU model name
+        local gpu_model=$(lspci | grep -i "VGA.*AMD\|Display.*AMD" | head -1 | sed -E 's/.*\[AMD\/ATI\] //' | sed -E 's/ \(rev.*\)//')
+        echo -e "${GREEN}AMD GPU:${NC} $gpu_model"
         
         # Quick health check
         local gpu_status="${RED}✗ Not configured${NC}"
@@ -543,8 +544,9 @@ show_system_info() {
     
     if [ "$HAS_NVIDIA_GPU" = true ]; then
         echo ""
-        echo -e "${GREEN}NVIDIA GPU:${NC}"
-        lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | sed 's/^/  /'
+        # Extract clean GPU model name
+        local gpu_model=$(lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | sed -E 's/.*NVIDIA (Corporation )?//' | sed -E 's/ \(rev.*\)//')
+        echo -e "${GREEN}NVIDIA GPU:${NC} $gpu_model"
         
         # Quick health check
         local gpu_status="${RED}✗ Not configured${NC}"
@@ -583,12 +585,15 @@ show_system_info() {
     echo -e "${GREEN}Storage Pools:${NC}"
     if command -v pvesm &>/dev/null; then
         pvesm status | tail -n +2 | awk '{
-            total=$5;
-            used=$6;
-            avail=$4;
+            # pvesm columns: Name Type Status Total Used Available %
+            name=$1;
+            total=$4;
+            used=$5;
+            avail=$6;
             if (total > 0) {
                 used_pct = (used / total) * 100;
-                printf "  %-15s %8.1f GB used / %8.1f GB total (%5.1f%%)\n", $1":", used/1024/1024, total/1024/1024, used_pct;
+                # Values are in bytes, convert to GB
+                printf "  %-15s %8.1f GB used / %8.1f GB total (%5.1f%%)\n", name":", used/1024/1024/1024, total/1024/1024/1024, used_pct;
             }
         }'
     else
@@ -622,15 +627,17 @@ show_system_info() {
             
             # Get IP address if container is running
             local ip_addr="N/A"
+            local status_colored
             if [ "$status" = "running" ]; then
                 ip_addr=$(pct exec "$vmid" -- ip -4 -br addr show 2>/dev/null | grep -v "^lo" | awk '{print $3}' | head -1 | cut -d'/' -f1)
                 [ -z "$ip_addr" ] && ip_addr="acquiring..."
-                status="${GREEN}running${NC}"
+                status_colored="\033[0;32mrunning\033[0m"  # Green
             else
-                status="${DIM}stopped${NC}"
+                status_colored="\033[2mstopped\033[0m"  # Dim
             fi
             
-            printf "  ${GREEN}[%-3s]${NC} %-20s %s  ${CYAN}%s${NC}\n" "$vmid" "$name" "$status" "$ip_addr"
+            # Use echo -e with printf format for proper color rendering
+            echo -e "  \033[0;32m[${vmid}]\033[0m $(printf '%-20s' "$name") $status_colored  \033[0;36m${ip_addr}\033[0m"
         done
     else
         echo -e "  ${DIM}No containers found${NC}"

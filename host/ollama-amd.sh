@@ -790,10 +790,11 @@ fi
 
 # Test rocminfo
 if command -v rocminfo >/dev/null 2>&1; then
-    if rocminfo 2>/dev/null | grep -qi "Agent [0-9]"; then
+    if rocminfo 2>/dev/null | grep -qi "gfx"; then
         check_result 0 "rocminfo detects GPU agents"
-        echo -e "${CYAN}Detected Agents:${NC}"
-        rocminfo 2>/dev/null | grep -i -A3 '\''Agent [0-9]'\'' | head -20 | sed '\''s/^/  /'\''
+        echo -e "${CYAN}GPU Agent Details:${NC}"
+        # Show GPU-specific info (Marketing Name and gfx architecture)
+        rocminfo 2>/dev/null | grep -E "Marketing Name:|Name:.*gfx" | grep -v "CPU" | head -5 | sed '\''s/^/  /'\''
     else
         check_result 1 "rocminfo does NOT detect GPU agents"
     fi

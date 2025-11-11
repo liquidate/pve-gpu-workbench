@@ -480,14 +480,20 @@ show_progress 6 $TOTAL_STEPS "Updating system packages"
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
 
+# Detect ROCm version from host
+ROCM_VERSION=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/rocm.list 2>/dev/null | head -1)
+if [ -z "$ROCM_VERSION" ]; then
+    ROCM_VERSION="7.1"  # Fallback to latest
+fi
+
 {
     pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
     
-    # Install ROCm utilities
+    # Install ROCm utilities (match host version: $ROCM_VERSION)
     pct exec $CONTAINER_ID -- bash -c "
         mkdir -p --mode=0755 /etc/apt/keyrings
         wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
-        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/$ROCM_VERSION noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
         apt update -qq
         apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
     "

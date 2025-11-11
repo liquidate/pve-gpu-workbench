@@ -865,3 +865,103 @@ echo -e "   ${GREEN}radeontop${NC}  ${YELLOW}(interactive, press 'q' to quit)${N
 echo ""
 
 
+# Use full path and give container a moment to sync filesystem
+sleep 2
+
+# Capture GPU verification output
+GPU_VERIFY_OUTPUT=$(pct exec $CONTAINER_ID -- /usr/local/bin/gpu-verify 2>&1)
+GPU_VERIFY_EXIT=$?
+
+# Log the output
+echo "$GPU_VERIFY_OUTPUT" >> "$LOG_FILE" 2>&1
+
+# Parse results for summary
+GPU_CHECKS_PASSED=$(echo "$GPU_VERIFY_OUTPUT" | grep -oP '\d+/\d+ passed' | head -1)
+GPU_MODEL=$(echo "$GPU_VERIFY_OUTPUT" | grep -i "Card series\|Card model" | head -1 | sed 's/.*: *//' | xargs)
+GPU_STATUS=""
+
+if [ $GPU_VERIFY_EXIT -eq 0 ]; then
+    complete_progress "GPU verified and working in container"
+    GPU_STATUS="✓ ALL CHECKS PASSED"
+else
+    complete_progress "GPU verification completed (some checks failed)"
+    GPU_STATUS="⚠ SOME CHECKS FAILED"
+fi
+
+# Store for display in completion message
+GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
+[ -n "$GPU_MODEL" ] && GPU_VERIFY_DETAILS="$GPU_MODEL" || GPU_VERIFY_DETAILS="AMD GPU"
+
+# Clear screen and show completion message
+clear
+echo ""
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}                 🎉  Ollama LXC Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}📋 Container Info:${NC}"
+echo -e "   Hostname:     ${GREEN}$HOSTNAME${NC}"
+echo -e "   IP Address:   ${GREEN}$IP_ADDRESS${NC}"
+echo -e "   Container ID: ${GREEN}$CONTAINER_ID${NC}"
+echo -e "   Ollama API:   ${GREEN}http://$IP_ADDRESS:11434${NC}"
+echo ""
+
+# Display GPU verification results
+if [ $GPU_VERIFY_EXIT -eq 0 ]; then
+    echo -e "${CYAN}🎮 GPU Status:${NC} ${GREEN}$GPU_VERIFY_SUMMARY${NC}"
+    echo -e "   ${GREEN}$GPU_VERIFY_DETAILS${NC}"
+    echo -e "   ${GREEN}✓${NC} Device files accessible"
+    echo -e "   ${GREEN}✓${NC} ROCm tools functional"
+    echo -e "   ${GREEN}✓${NC} Ollama service running"
+else
+    echo -e "${CYAN}🎮 GPU Status:${NC} ${YELLOW}$GPU_VERIFY_SUMMARY${NC}"
+    echo -e "   ${DIM}Run 'pct exec $CONTAINER_ID /usr/local/bin/gpu-verify' for details${NC}"
+fi
+
+echo ""
+echo -e "${CYAN}📄 Installation Log:${NC} ${GREEN}$LOG_FILE${NC}"
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}🚀 Quick Start - Verify Everything Works:${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}1. SSH into your container:${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo ""
+echo -e "${CYAN}2. Pull a model and test it:${NC}"
+echo -e "   ${GREEN}ollama pull llama3.2:3b${NC}"
+echo -e "   ${GREEN}ollama run llama3.2:3b \"Why is the sky blue? One sentence.\"${NC}"
+echo ""
+echo -e "${CYAN}3. Monitor GPU usage (in a new terminal):${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo -e "   ${GREEN}watch -n 0.5 rocm-smi --showuse --showmemuse${NC}"
+echo ""
+echo -e "   ${YELLOW}→ You should see GPU usage spike when running models${NC}"
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}📚 Next Steps:${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}💬 Add a ChatGPT-like Web UI:${NC}"
+echo -e "   Install Open WebUI from Proxmox Community Scripts:"
+echo -e "   ${GREEN}https://community-scripts.github.io/ProxmoxVE/scripts?id=openwebui${NC}"
+echo ""
+echo -e "   Then configure it to connect to: ${GREEN}http://$IP_ADDRESS:11434${NC}"
+echo ""
+echo -e "${CYAN}🔄 Update Ollama (when new versions are released):${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo -e "   ${GREEN}update${NC}"
+echo ""
+echo -e "${CYAN}🔍 Verify GPU (troubleshoot GPU issues):${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo -e "   ${GREEN}gpu-verify${NC}"
+echo ""
+echo -e "${CYAN}📊 Alternative GPU Monitor:${NC}"
+echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
+echo -e "   ${GREEN}radeontop${NC}  ${YELLOW}(interactive, press 'q' to quit)${NC}"
+echo ""
+
+

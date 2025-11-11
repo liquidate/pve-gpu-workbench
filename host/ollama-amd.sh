@@ -698,7 +698,7 @@ else
     check_result 1 "rocm-smi not available"
 fi
 
-# Test rocminfo
+# Test rocminfo (informational only - may not work in LXC)
 if command -v rocminfo >/dev/null 2>&1; then
     if rocminfo 2>/dev/null | grep -qi "gfx"; then
         check_result 0 "rocminfo detects GPU agents"
@@ -706,7 +706,8 @@ if command -v rocminfo >/dev/null 2>&1; then
         # Show GPU-specific info (Marketing Name and gfx architecture)
         rocminfo 2>/dev/null | grep -E "Marketing Name:|Name:.*gfx" | grep -v "CPU" | head -5 | sed '\''s/^/  /'\''
     else
-        check_result 1 "rocminfo does NOT detect GPU agents"
+        # Don'\''t count as failure - rocminfo often doesn'\''t work in LXC but GPU is still functional
+        echo -e "${CYAN}ℹ${NC} rocminfo GPU agent detection skipped (not required in LXC)"
     fi
 else
     check_result 1 "rocminfo not available"

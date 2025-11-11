@@ -62,23 +62,22 @@ complete_progress() {
 }
 
 echo ""
-echo -e "${CYAN}>>> Calculating recommended configuration...${NC}"
+echo -e "${CYAN}>>> Calculating recommended defaults...${NC}"
 echo ""
 
-# ═══════════════════════════════════════════════════════════════
-# STEP 1: Calculate ALL defaults (silently, no prompting)
-# ═══════════════════════════════════════════════════════════════
-
 # Detect GPU PCI address
+if [ "$QUICK_MODE" = false ]; then
+    echo -e "${GREEN}>>> Detecting GPU PCI address...${NC}"
+fi
 GPU_PCI_PATH=""
-GPU_MODEL=""
 for card in /dev/dri/by-path/pci-*-card; do
     if [ -e "$card" ]; then
         pci_addr=$(basename "$card" | sed 's/pci-\(.*\)-card/\1/')
         gpu_info=$(lspci -s "${pci_addr#0000:}" 2>/dev/null | grep -i "VGA\|3D\|Display" || echo "")
         if echo "$gpu_info" | grep -qi amd; then
             GPU_PCI_PATH="$pci_addr"
-            GPU_MODEL=$(echo "$gpu_info" | sed -E 's/.*\[AMD\/ATI\] //' | sed -E 's/ \(rev.*\)//')
+            echo -e "${GREEN}✓ Found AMD GPU at: $GPU_PCI_PATH${NC}"
+            echo "  $gpu_info"
             break
         fi
     fi
@@ -94,7 +93,41 @@ NEXT_ID=100
 while pct status $NEXT_ID &>/dev/null; do
     ((NEXT_ID++))
 done
-CONTAINER_ID=$NEXT_ID
+
+if [ "$QUICK_MODE" = true ]; then
+    CONTAINER_ID=$NEXT_ID
+else
+    echo ""
+    echo -e "${GREEN}>>> Finding next available container ID...${NC}"
+    echo -e "${GREEN}✓ Next available ID: $NEXT_ID${NC}"
+    echo ""
+    
+    # Prompt for container ID
+    while true; do
+        read -r -p "Enter container ID [$NEXT_ID]: " CONTAINER_ID
+        CONTAINER_ID=${CONTAINER_ID:-$NEXT_ID}
+        
+        # Validate it's a number
+        if ! [[ "$CONTAINER_ID" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}Invalid ID: must be a number${NC}"
+            continue
+        fi
+        
+        # Check if already exists
+        if pct status $CONTAINER_ID &>/dev/null; then
+            echo -e "${RED}Container ID $CONTAINER_ID already exists${NC}"
+            read -r -p "Choose a different ID? [Y/n]: " RETRY
+            RETRY=${RETRY:-Y}
+            if [[ "$RETRY" =~ ^[Yy]$ ]]; then
+                continue
+            else
+                exit 1
+            fi
+        fi
+        
+        break
+    done
+fi
 
 # Determine hostname
 BASE_HOSTNAME="ollama"
@@ -107,22 +140,46 @@ if pct list 2>/dev/null | grep -q "[[:space:]]${BASE_HOSTNAME}[[:space:]]"; then
 else
     HOSTNAME="${BASE_HOSTNAME}"
 fi
+echo -e "${GREEN}✓ Hostname: $HOSTNAME${NC}"
 
 # Detect network configuration
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}>>> Detecting network configuration...${NC}"
+fi
+
+# Get bridge IP and subnet
 BRIDGE_IP=$(ip -4 addr show vmbr0 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
 BRIDGE_CIDR=$(ip -4 addr show vmbr0 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+/\d+' | cut -d'/' -f2)
 SUBNET=$(echo "$BRIDGE_IP" | cut -d'.' -f1-3)
+
+# Get gateway
 GATEWAY=$(ip route show default | grep -oP '(?<=via )\d+\.\d+\.\d+\.\d+' | head -n1)
 
-# Find available IP
+if [ "$QUICK_MODE" = false ]; then
+    echo -e "${CYAN}Network detected:${NC}"
+    echo "  Bridge (vmbr0): $BRIDGE_IP/$BRIDGE_CIDR"
+    echo "  Gateway: $GATEWAY"
+    echo "  Subnet: $SUBNET.0/$BRIDGE_CIDR"
+    
+    # Find available IP
+    echo ""
+    echo -e "${GREEN}>>> Scanning for available IP addresses...${NC}"
+fi
 SUGGESTED_IP=""
 for i in {100..200}; do
     TEST_IP="${SUBNET}.${i}"
+    
+    # Skip if matches bridge IP
     if [ "$TEST_IP" = "$BRIDGE_IP" ]; then
         continue
     fi
+    
+    # Quick ping test
     if ! ping -c 1 -W 1 "$TEST_IP" &>/dev/null; then
-        if ! timeout 1 arping -c 1 -I vmbr0 "$TEST_IP" &>/dev/null 2>&1; then
+        # Deeper check with arping
+        if ! timeout 1 arping -c 1 -I vmbr0 "$TEST_IP" &>/dev/null; then
+            # Check existing LXC/QEMU configs
             if ! grep -r "ip=${TEST_IP}/" /etc/pve/lxc/ /etc/pve/qemu-server/ 2>/dev/null | grep -q .; then
                 SUGGESTED_IP="$TEST_IP"
                 break
@@ -134,19 +191,105 @@ done
 if [ -z "$SUGGESTED_IP" ]; then
     SUGGESTED_IP="${SUBNET}.100"
 fi
-IP_ADDRESS="$SUGGESTED_IP"
 
-# Detect available storage pools (container-compatible, sorted by space)
+if [ "$QUICK_MODE" = true ]; then
+    IP_ADDRESS="$SUGGESTED_IP"
+else
+    echo -e "${GREEN}✓ Suggested IP: $SUGGESTED_IP${NC}"
+    echo ""
+    
+    # Prompt for IP address
+    while true; do
+        read -r -p "Enter IP address for this container [$SUGGESTED_IP]: " IP_ADDRESS
+        IP_ADDRESS=${IP_ADDRESS:-$SUGGESTED_IP}
+    
+    # Validate IP format
+    if [[ ! "$IP_ADDRESS" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo -e "${RED}Invalid IP format. Please use format: xxx.xxx.xxx.xxx${NC}"
+        continue
+    fi
+    
+    # Validate each octet
+    VALID_IP=true
+    IFS='.' read -ra OCTETS <<< "$IP_ADDRESS"
+    for octet in "${OCTETS[@]}"; do
+        if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
+            echo -e "${RED}Invalid IP: octets must be 0-255${NC}"
+            VALID_IP=false
+            break
+        fi
+    done
+    
+    if [ "$VALID_IP" = false ]; then
+        continue
+    fi
+    
+    # Validate subnet
+    IP_SUBNET=$(echo "$IP_ADDRESS" | cut -d'.' -f1-3)
+    if [ "$IP_SUBNET" != "$SUBNET" ]; then
+        echo -e "${YELLOW}Warning: IP $IP_ADDRESS is not in detected subnet ${SUBNET}.0/${BRIDGE_CIDR}${NC}"
+        read -r -p "Continue anyway? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            continue
+        fi
+    fi
+    
+    # Check for conflicts
+    if ping -c 1 -W 1 "$IP_ADDRESS" &>/dev/null; then
+        echo -e "${RED}IP $IP_ADDRESS is already in use (responds to ping)${NC}"
+        continue
+    fi
+    
+    if grep -r "ip=${IP_ADDRESS}/" /etc/pve/lxc/ /etc/pve/qemu-server/ 2>/dev/null | grep -q .; then
+        echo -e "${RED}IP $IP_ADDRESS is already assigned to another container/VM${NC}"
+        continue
+    fi
+    
+    break
+    done
+fi
+
+# Gateway configuration
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    while true; do
+        read -r -p "Gateway address [$GATEWAY]: " GATEWAY_INPUT
+        GATEWAY_INPUT=${GATEWAY_INPUT:-$GATEWAY}
+    
+    # Validate gateway format
+    if [[ ! "$GATEWAY_INPUT" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo -e "${RED}Invalid gateway format. Please use format: xxx.xxx.xxx.xxx${NC}"
+        continue
+    fi
+    
+    GATEWAY="$GATEWAY_INPUT"
+    break
+    done
+fi
+# If quick mode, gateway is already set from auto-detection
+
+# Detect available storage
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}>>> Detecting available storage...${NC}"
+    echo ""
+    echo -e "${CYAN}Available storage pools:${NC}"
+fi
+
 declare -a STORAGE_NAMES
 declare -A STORAGE_INFO
-declare -a STORAGE_LIST
 INDEX=1
 
+# Build a list of storage pools that support rootdir content (containers)
+# Store as: index|name|available_kb
+declare -a STORAGE_LIST
 while IFS= read -r line; do
     name=$(echo "$line" | awk '{print $1}')
     type=$(echo "$line" | awk '{print $2}')
     avail=$(echo "$line" | awk '{print $4}')
     
+    # Check if this storage supports container content (rootdir)
+    # Parse /etc/pve/storage.cfg to check content types
     if grep -A 10 "^${type}: ${name}$" /etc/pve/storage.cfg 2>/dev/null | grep -q "content.*rootdir"; then
         STORAGE_LIST+=("${INDEX}|${name}|${avail}")
         ((INDEX++))
@@ -159,19 +302,39 @@ if [ ${#STORAGE_LIST[@]} -eq 0 ]; then
     exit 1
 fi
 
-# Sort by available space and populate arrays
+# Sort storage by available space (descending) and populate arrays
 INDEX=1
 while IFS='|' read -r _ name avail; do
     STORAGE_NAMES[$INDEX]=$name
     STORAGE_INFO[$name]=$avail
-    if [ $INDEX -eq 1 ]; then
-        STORAGE="$name"  # Default to largest
-        STORAGE_AVAIL_GB=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
+    if [ "$QUICK_MODE" = false ]; then
+        # Convert KB to GB for display (pvesm shows KB)
+        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
+        printf "  [%d] %-20s %6s GB available\n" "$INDEX" "$name" "$avail_gb"
     fi
     ((INDEX++))
 done < <(printf '%s\n' "${STORAGE_LIST[@]}" | sort -t'|' -k3 -rn)
 
-# Resource allocation defaults
+# Default to first in list (largest available space)
+DEFAULT_STORAGE_NUM=1
+
+if [ "$QUICK_MODE" = true ]; then
+    STORAGE="${STORAGE_NAMES[$DEFAULT_STORAGE_NUM]}"
+else
+    echo ""
+    read -r -p "Select storage pool [${DEFAULT_STORAGE_NUM}]: " STORAGE_CHOICE
+    STORAGE_CHOICE=${STORAGE_CHOICE:-$DEFAULT_STORAGE_NUM}
+    
+    if [ -z "${STORAGE_NAMES[$STORAGE_CHOICE]}" ]; then
+        echo -e "${RED}Invalid storage selection${NC}"
+        exit 1
+    fi
+    
+    STORAGE="${STORAGE_NAMES[$STORAGE_CHOICE]}"
+fi
+
+# Resource allocation
+# Detect total RAM and GPU VRAM
 TOTAL_RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
 GPU_VRAM_ALLOCATED=0
 if grep -q "amdgpu.gttsize=98304" /proc/cmdline 2>/dev/null; then
@@ -186,178 +349,85 @@ if [ $AVAILABLE_RAM -lt 0 ]; then
     AVAILABLE_RAM=$((TOTAL_RAM_GB - 4))
 fi
 
-# Smart defaults
-DISK_SIZE=256
-MEMORY=16
-CORES=12
-SWAP=8
+# Smart defaults (designed for Ollama - can run large models)
+DEFAULT_DISK=256
+DEFAULT_MEMORY=16
+DEFAULT_CORES=12
+DEFAULT_SWAP=8
 
-# Adjust if limited RAM
+# Adjust defaults based on available RAM
 if [ $AVAILABLE_RAM -lt 16 ]; then
-    DISK_SIZE=128
-    MEMORY=8
-    CORES=6
-    SWAP=4
+    DEFAULT_DISK=128
+    DEFAULT_MEMORY=8
+    DEFAULT_CORES=6
+    DEFAULT_SWAP=4
 fi
 
-# ═══════════════════════════════════════════════════════════════
-# STEP 2: Show summary of planned configuration
-# ═══════════════════════════════════════════════════════════════
-
-echo -e "${GREEN}✓ Configuration calculated${NC}"
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}Planned Configuration:${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "${BOLD}Container:${NC}"
-echo "  ID: $CONTAINER_ID"
-echo "  Hostname: $HOSTNAME"
-echo ""
-echo -e "${BOLD}GPU:${NC}"
-echo "  Model: $GPU_MODEL"
-echo "  PCI: $GPU_PCI_PATH"
-echo ""
-echo -e "${BOLD}Network:${NC}"
-echo "  IP: $IP_ADDRESS/$BRIDGE_CIDR"
-echo "  Gateway: $GATEWAY"
-echo "  Bridge: vmbr0"
-echo ""
-echo -e "${BOLD}Storage:${NC}"
-echo "  Pool: $STORAGE ($STORAGE_AVAIL_GB GB available)"
-echo "  Disk: ${DISK_SIZE}GB"
-echo ""
-echo -e "${BOLD}Resources:${NC}"
-echo "  RAM: ${MEMORY}GB (of ${AVAILABLE_RAM}GB available)"
-echo "  CPU Cores: $CORES"
-echo "  Swap: ${SWAP}GB"
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-read -r -p "Proceed with this configuration? [Y/n] (enter 'n' to customize): " PROCEED
-PROCEED=${PROCEED:-Y}
-echo ""
-
-# ═══════════════════════════════════════════════════════════════
-# STEP 3: Handle customization if requested
-# ═══════════════════════════════════════════════════════════════
-
-if [[ ! "$PROCEED" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Entering customization mode...${NC}"
+if [ "$QUICK_MODE" = true ]; then
+    DISK_SIZE=$DEFAULT_DISK
+    MEMORY=$DEFAULT_MEMORY
+    CORES=$DEFAULT_CORES
+    SWAP=$DEFAULT_SWAP
+else
     echo ""
-    
-    # Customize Container ID
-    while true; do
-        read -r -p "Container ID [$CONTAINER_ID]: " CUSTOM_ID
-        CUSTOM_ID=${CUSTOM_ID:-$CONTAINER_ID}
-        
-        if ! [[ "$CUSTOM_ID" =~ ^[0-9]+$ ]]; then
-            echo -e "${RED}Invalid ID: must be a number${NC}"
-            continue
-        fi
-        
-        if pct status $CUSTOM_ID &>/dev/null && [ "$CUSTOM_ID" != "$CONTAINER_ID" ]; then
-            echo -e "${RED}Container ID $CUSTOM_ID already exists${NC}"
-            continue
-        fi
-        
-        CONTAINER_ID=$CUSTOM_ID
-        break
-    done
-    
-    # Customize Hostname
-    read -r -p "Hostname [$HOSTNAME]: " CUSTOM_HOSTNAME
-    HOSTNAME=${CUSTOM_HOSTNAME:-$HOSTNAME}
-    
-    # Customize IP Address
-    while true; do
-        read -r -p "IP Address [$IP_ADDRESS]: " CUSTOM_IP
-        CUSTOM_IP=${CUSTOM_IP:-$IP_ADDRESS}
-        
-        if [[ ! "$CUSTOM_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo -e "${RED}Invalid IP format${NC}"
-            continue
-        fi
-        
-        IP_ADDRESS=$CUSTOM_IP
-        break
-    done
-    
-    # Customize Gateway
-    while true; do
-        read -r -p "Gateway [$GATEWAY]: " CUSTOM_GW
-        CUSTOM_GW=${CUSTOM_GW:-$GATEWAY}
-        
-        if [[ ! "$CUSTOM_GW" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo -e "${RED}Invalid gateway format${NC}"
-            continue
-        fi
-        
-        GATEWAY=$CUSTOM_GW
-        break
-    done
-    
-    # Customize Storage
-    echo ""
-    echo "Available storage pools:"
-    for i in "${!STORAGE_NAMES[@]}"; do
-        name="${STORAGE_NAMES[$i]}"
-        avail="${STORAGE_INFO[$name]}"
-        avail_gb=$(awk "BEGIN {printf \"%.0f\", $avail / 1024 / 1024}")
-        printf "  [%d] %-20s %6s GB available\n" "$i" "$name" "$avail_gb"
-    done
-    echo ""
-    read -r -p "Select storage pool [1]: " STORAGE_CHOICE
-    STORAGE_CHOICE=${STORAGE_CHOICE:-1}
-    
-    if [ -n "${STORAGE_NAMES[$STORAGE_CHOICE]}" ]; then
-        STORAGE="${STORAGE_NAMES[$STORAGE_CHOICE]}"
+    echo -e "${GREEN}>>> Resource allocation...${NC}"
+    echo -e "${CYAN}System resources:${NC}"
+    echo "  Total RAM: ${TOTAL_RAM_GB}GB"
+    if [ $GPU_VRAM_ALLOCATED -gt 0 ]; then
+        echo "  GPU VRAM: ${GPU_VRAM_ALLOCATED}GB"
     fi
-    
-    # Customize Resources
+    echo "  Available for LXC: ~${AVAILABLE_RAM}GB"
     echo ""
-    read -r -p "Disk size in GB [$DISK_SIZE]: " CUSTOM_DISK
-    DISK_SIZE=${CUSTOM_DISK:-$DISK_SIZE}
     
-    read -r -p "RAM in GB [$MEMORY]: " CUSTOM_MEM
-    MEMORY=${CUSTOM_MEM:-$MEMORY}
+    read -r -p "Disk size in GB [$DEFAULT_DISK]: " DISK_SIZE
+    DISK_SIZE=${DISK_SIZE:-$DEFAULT_DISK}
     
-    read -r -p "CPU cores [$CORES]: " CUSTOM_CORES
-    CORES=${CUSTOM_CORES:-$CORES}
+    read -r -p "Memory in GB [$DEFAULT_MEMORY]: " MEMORY
+    MEMORY=${MEMORY:-$DEFAULT_MEMORY}
     
-    read -r -p "Swap in GB [$SWAP]: " CUSTOM_SWAP
-    SWAP=${CUSTOM_SWAP:-$SWAP}
+    read -r -p "CPU cores [$DEFAULT_CORES]: " CORES
+    CORES=${CORES:-$DEFAULT_CORES}
     
-    echo ""
-    echo -e "${GREEN}✓ Configuration updated${NC}"
-    echo ""
+    read -r -p "Swap in GB [$DEFAULT_SWAP]: " SWAP
+    SWAP=${SWAP:-$DEFAULT_SWAP}
 fi
 
-# ═══════════════════════════════════════════════════════════════
-# STEP 4: Get root password
-# ═══════════════════════════════════════════════════════════════
-
-echo -e "${CYAN}Set root password for SSH access:${NC}"
-echo -n "Enter password: "
-read -s ROOT_PASSWORD
-echo ""
-echo -n "Confirm password: "
-read -s ROOT_PASSWORD_CONFIRM
-echo ""
-
-if [ "$ROOT_PASSWORD" != "$ROOT_PASSWORD_CONFIRM" ]; then
-    echo -e "${RED}ERROR: Passwords do not match${NC}"
-    exit 1
+# Summary
+if [ "$QUICK_MODE" = false ]; then
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Configuration Summary${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${CYAN}Container:${NC}"
+    echo "  ID: $CONTAINER_ID"
+    echo "  Hostname: $HOSTNAME"
+    echo "  IP: $IP_ADDRESS/$BRIDGE_CIDR"
+    echo "  Gateway: $GATEWAY"
+    echo ""
+    echo -e "${CYAN}Resources:${NC}"
+    echo "  Storage: $STORAGE"
+    echo "  Disk: ${DISK_SIZE}GB"
+    echo "  Memory: ${MEMORY}GB"
+    echo "  CPU Cores: $CORES"
+    echo "  Swap: ${SWAP}GB"
+    echo ""
+    echo -e "${CYAN}GPU:${NC}"
+    echo "  Type: AMD"
+    echo "  PCI: $GPU_PCI_PATH"
+    echo ""
+    echo -e "${CYAN}Software:${NC}"
+    echo "  Ollama: Latest version"
+    echo "  Auto-start: Yes (systemd service)"
+    echo ""
+    
+    read -r -p "Continue with these settings? [Y/n]: " CONFIRM
+    CONFIRM=${CONFIRM:-Y}
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
 fi
-
-if [ -z "$ROOT_PASSWORD" ]; then
-    echo -e "${RED}ERROR: Password cannot be empty${NC}"
-    exit 1
-fi
-
-echo ""
-echo -e "${GREEN}✓ Password set${NC}"
-echo ""
 
 # Create LXC container
 TOTAL_STEPS=9
@@ -415,7 +485,28 @@ sleep 5
 
 complete_progress "Container started"
 
-# Set root password (already collected earlier)
+# Set root password
+echo ""
+echo ""
+echo -e "${CYAN}Set root password for SSH access:${NC}"
+echo -n "Enter password: "
+read -s ROOT_PASSWORD
+echo ""
+echo -n "Confirm password: "
+read -s ROOT_PASSWORD_CONFIRM
+echo ""
+
+if [ "$ROOT_PASSWORD" != "$ROOT_PASSWORD_CONFIRM" ]; then
+    echo -e "${RED}ERROR: Passwords do not match${NC}"
+    exit 1
+fi
+
+if [ -z "$ROOT_PASSWORD" ]; then
+    echo -e "${RED}ERROR: Password cannot be empty${NC}"
+    exit 1
+fi
+
+echo ""
 show_progress 4 $TOTAL_STEPS "Setting password and SSH"
 
 {

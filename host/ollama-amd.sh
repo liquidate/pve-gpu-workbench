@@ -489,7 +489,7 @@ show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
         wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
         echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
         apt update -qq
-        apt install -y rocm-smi rocminfo radeontop
+        apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
     "
     
     # Install Ollama

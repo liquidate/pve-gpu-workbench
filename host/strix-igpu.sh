@@ -46,6 +46,17 @@ if ! [[ "$vram_gb" =~ ^[0-9]+$ ]] || [ "$vram_gb" -lt 1 ] || [ "$vram_gb" -gt 96
     exit 1
 fi
 
+# Check if configuration is already set to the desired value
+if [ -n "$current_gtt" ]; then
+    if [ "$current_gb" -eq "$vram_gb" ]; then
+        echo ""
+        echo -e "${GREEN}✓ Already configured with ${vram_gb}GB VRAM${NC}"
+        echo -e "${DIM}No changes needed${NC}"
+        echo ""
+        exit 0
+    fi
+fi
+
 # Convert to MB for gttsize parameter
 gtt_size=$((vram_gb * 1024))
 
@@ -101,3 +112,6 @@ else
     echo -e "${GREEN}✓ Configuration updated successfully!${NC}"
     echo -e "${YELLOW}⚠  Reboot required to apply changes${NC}"
 fi
+
+echo ""
+exit 3  # Exit code 3 = success but reboot required

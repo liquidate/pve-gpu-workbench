@@ -283,11 +283,14 @@ run_script() {
     echo -e "${GREEN}========================================${NC}"
     echo ""
     
-    if bash "$script_path" < /dev/tty; then
+    bash "$script_path" < /dev/tty
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ] || [ $exit_code -eq 3 ]; then
         echo ""
         echo -e "${GREEN}✓ Completed: $script_command${NC}"
         echo ""
-        return 0
+        return $exit_code
     else
         echo ""
         echo -e "${RED}✗ Failed: $script_command${NC}"
@@ -748,10 +751,12 @@ while true; do
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
-                        if run_script "$cmd"; then
+                        run_script "$cmd"
+                        script_exit=$?
+                        if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
                             ((scripts_run++))
-                            # Scripts that require reboot
-                            if [[ "$cmd" == "strix-igpu" ]] || [[ "$cmd" == "amd-drivers" ]]; then
+                            # Check if script returned exit code 3 (reboot needed)
+                            if [ $script_exit -eq 3 ]; then
                                 reboot_needed=true
                             fi
                         else
@@ -772,10 +777,12 @@ while true; do
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
-                        if run_script "$cmd"; then
+                        run_script "$cmd"
+                        script_exit=$?
+                        if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
                             ((scripts_run++))
-                            # nvidia-drivers requires reboot
-                            if [[ "$cmd" == "nvidia-drivers" ]]; then
+                            # Check if script returned exit code 3 (reboot needed)
+                            if [ $script_exit -eq 3 ]; then
                                 reboot_needed=true
                             fi
                         else
@@ -796,8 +803,14 @@ while true; do
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
-                        if run_script "$cmd"; then
+                        run_script "$cmd"
+                        script_exit=$?
+                        if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
                             ((scripts_run++))
+                            # Check if script returned exit code 3 (reboot needed)
+                            if [ $script_exit -eq 3 ]; then
+                                reboot_needed=true
+                            fi
                         else
                             read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
                             [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
@@ -860,7 +873,7 @@ while true; do
             
         "q"|"quit")
             echo ""
-            echo -e "${GREEN}Thank you for using Proxmox Setup Scripts${NC}"
+            echo -e "${GREEN}Thank you for using Proxmox GPU Setup!${NC}"
             echo ""
             exit 0
             ;;

@@ -73,6 +73,21 @@ if ! [[ "$ROCM_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
+# Check if this version is already configured
+if [ -f /etc/apt/sources.list.d/rocm.list ]; then
+    current_version=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/rocm.list 2>/dev/null | head -1)
+    if [ "$current_version" = "$ROCM_VERSION" ]; then
+        # Check if ROCm packages are actually installed
+        if dpkg -l | grep -q "^ii.*rocm-smi"; then
+            echo ""
+            echo -e "${GREEN}✓ ROCm ${ROCM_VERSION} is already installed${NC}"
+            echo -e "${DIM}No changes needed. Run 'amd-upgrade' to change versions.${NC}"
+            echo ""
+            exit 0
+        fi
+    fi
+fi
+
 echo ""
 echo -e "${CYAN}>>> Installing ROCm ${ROCM_VERSION}${NC}"
 echo ">>> Adding AMD ROCm ${ROCM_VERSION} repository"
@@ -117,4 +132,6 @@ chmod +x /etc/profile.d/rocm.sh
 source /etc/profile.d/rocm.sh
 
 echo ">>> AMD ROCm driver installation completed."
-echo ">>> Run '005 - verify-amd-drivers.sh' to verify the installation."
+echo -e "${YELLOW}⚠  Reboot recommended to ensure all drivers are loaded${NC}"
+
+exit 3  # Exit code 3 = success but reboot required

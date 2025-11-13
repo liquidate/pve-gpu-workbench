@@ -238,8 +238,8 @@ else
     HOSTNAME="${BASE_HOSTNAME}"
 fi
 
-# Calculate resources (Open WebUI is lightweight without extras)
-DISK_SIZE=10  # 10GB should be plenty without CUDA dependencies
+# Calculate resources (Open WebUI includes sentence-transformers which needs torch/CUDA)
+DISK_SIZE=20  # 20GB for Open WebUI + all dependencies (includes PyTorch + CUDA)
 MEMORY=4      # 4GB RAM
 SWAP=2        # 2GB swap
 CORES=2       # 2 CPU cores
@@ -429,7 +429,7 @@ complete_progress "Prerequisites installed"
 
 # Install uv and Open WebUI
 echo "Installing uv (Python package installer)..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - 1-2 minutes..."
+start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - 3-5 minutes..."
 
 pct exec $CONTAINER_ID -- bash -c "
     # Install uv

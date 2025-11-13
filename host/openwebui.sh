@@ -411,9 +411,9 @@ fi
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 
-# Install prerequisites (ffmpeg has ~950+ package dependencies, takes time)
+# Install prerequisites (ffmpeg has 950+ package dependencies, takes time)
 echo "Installing prerequisites..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 5/$TOTAL_STEPS]${NC} Installing prerequisites (ffmpeg + ~950 deps, 2-4 minutes)..."
+start_spinner "${CYAN}[Step 5/$TOTAL_STEPS]${NC} Installing prerequisites (ffmpeg + 950 deps, 2-4 minutes)..."
 pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 ffmpeg python3-pip >> "$LOG_FILE" 2>&1
 stop_spinner
 complete_progress "Prerequisites installed"

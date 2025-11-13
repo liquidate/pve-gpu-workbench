@@ -475,9 +475,11 @@ show_progress 6 $TOTAL_STEPS "Updating system packages"
     PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
     
     if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'"
+        echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
+        echo -ne "\r\033[K${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages..."
+        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
     fi
-} >> "$LOG_FILE" 2>&1
+} 
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
@@ -489,20 +491,31 @@ if [ -z "$ROCM_VERSION" ]; then
 fi
 
 {
-    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
+    echo "Installing prerequisites..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing prerequisites..."
+    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
     
     # Install ROCm utilities (match host version: $ROCM_VERSION)
+    echo "Adding ROCm $ROCM_VERSION repository..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Adding ROCm $ROCM_VERSION repository..."
     pct exec $CONTAINER_ID -- bash -c "
         mkdir -p --mode=0755 /etc/apt/keyrings
         wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
         echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/$ROCM_VERSION noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
         apt update -qq
+    " >> "$LOG_FILE" 2>&1
+    
+    echo "Installing ROCm utilities (~2GB download)..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing ROCm utilities (~2GB, please wait)..."
+    pct exec $CONTAINER_ID -- bash -c "
         apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
-    "
+    " >> "$LOG_FILE" 2>&1
     
     # Install Ollama
-    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
-} >> "$LOG_FILE" 2>&1
+    echo "Installing Ollama..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing Ollama..."
+    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
+}
 
 complete_progress "Ollama and ROCm utilities installed"
 show_progress 8 $TOTAL_STEPS "Configuring Ollama service"

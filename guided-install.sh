@@ -454,9 +454,8 @@ get_scripts_by_category() {
         if [ "$cmd_category" = "$category" ]; then
             # Apply GPU filter if specified
             if [ -n "$gpu_filter" ] && [ "$gpu_filter" != "all" ]; then
-                # Check for both prefix (nvidia-*, amd-*) and suffix (*-nvidia, *-amd) patterns
-                if [[ "$command" == ${gpu_filter}-* ]] || [[ "$command" == *-${gpu_filter} ]] || 
-                   [[ "$command" != amd-* && "$command" != nvidia-* && "$command" != *-amd && "$command" != *-nvidia ]]; then
+                # Only include scripts that match the GPU filter (prefix or suffix)
+                if [[ "$command" == ${gpu_filter}-* ]] || [[ "$command" == *-${gpu_filter} ]]; then
                     echo "$command"
                 fi
             else

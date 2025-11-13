@@ -236,14 +236,14 @@ echo "  1) nvidia-kernel-dkms (Proprietary)"
 echo "     • Mature and stable"
 echo "     • Works with all NVIDIA GPUs"
 if [ "$SECURE_BOOT_ENABLED" = true ]; then
-    echo "     • ${RED}⚠ Requires Secure Boot to be disabled${NC}"
+    echo -e "     • ${RED}⚠ Requires Secure Boot to be disabled${NC}"
 fi
 echo ""
 echo "  2) nvidia-kernel-open-dkms (Open Source)"
 echo "     • Recommended for RTX 20xx and newer"
 echo "     • Better performance on newer GPUs"
 if [ "$SECURE_BOOT_ENABLED" = true ]; then
-    echo "     • ${GREEN}✓ Works with Secure Boot (signed)${NC}"
+    echo -e "     • ${GREEN}✓ Works with Secure Boot (signed)${NC}"
 fi
 echo ""
 

@@ -429,7 +429,7 @@ complete_progress "Prerequisites installed"
 
 # Install uv and Open WebUI
 echo "Installing uv (Python package installer)..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - lightweight, no CUDA deps, 1-2 minutes..."
+start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - 1-2 minutes..."
 
 pct exec $CONTAINER_ID -- bash -c "
     # Install uv

@@ -27,18 +27,29 @@ echo ""
 # Track overall status
 CHECKS_PASSED=0
 CHECKS_TOTAL=0
+OPTIONAL_CHECKS_FAILED=0
 REBOOT_NEEDED=false
 
 # Helper function to report check results
 check_result() {
     local status=$1
     local message=$2
+    local is_optional=false
+    
+    # Check if this is an optional check
+    if [[ "$message" == *"(optional)"* ]]; then
+        is_optional=true
+    fi
+    
     ((CHECKS_TOTAL++))
     if [ "$status" -eq 0 ]; then
         echo -e "${GREEN}✓${NC} $message"
         ((CHECKS_PASSED++))
     else
         echo -e "${RED}✗${NC} $message"
+        if [ "$is_optional" = true ]; then
+            ((OPTIONAL_CHECKS_FAILED++))
+        fi
     fi
 }
 
@@ -141,16 +152,6 @@ else
     echo -e "${YELLOW}  → Install nvidia-utils package${NC}"
 fi
 
-# Check for nvcc (CUDA compiler)
-if command -v nvcc >/dev/null 2>&1; then
-    check_result 0 "nvcc (CUDA compiler) installed"
-    CUDA_VERSION=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9.]+' || echo "unknown")
-    echo -e "${DIM}  CUDA version: $CUDA_VERSION${NC}"
-else
-    check_result 1 "nvcc not installed (CUDA toolkit not installed)"
-    echo -e "${DIM}  Note: CUDA toolkit is optional for LXC passthrough${NC}"
-fi
-
 # Check for nvtop (monitoring tool)
 if command -v nvtop >/dev/null 2>&1; then
     check_result 0 "nvtop installed (GPU monitoring)"
@@ -218,14 +219,31 @@ elif [ "$REBOOT_NEEDED" = true ]; then
     echo ""
     exit 2
 else
-    echo -e "${YELLOW}⚠ SOME CHECKS FAILED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-    echo -e "${YELLOW}Troubleshooting:${NC}"
-    echo "  1. Install drivers: Run 'nvidia-drivers'"
-    echo "  2. Reboot the system"
-    echo "  3. Run this verification again"
-    echo "  4. Check kernel logs: dmesg | grep -i nvidia"
-    echo ""
-    exit 1
+    # Calculate critical checks (total - optional)
+    CRITICAL_FAILED=$((CHECKS_TOTAL - CHECKS_PASSED - OPTIONAL_CHECKS_FAILED))
+    
+    if [ "$CRITICAL_FAILED" -eq 0 ]; then
+        # All critical checks passed, only optional tools missing
+        echo -e "${GREEN}✓ ALL CRITICAL CHECKS PASSED ($CHECKS_PASSED/$CHECKS_TOTAL total)${NC}"
+        echo -e "${GREEN}========================================${NC}"
+        echo ""
+        if [ "$OPTIONAL_CHECKS_FAILED" -gt 0 ]; then
+            echo -e "${DIM}Note: $OPTIONAL_CHECKS_FAILED optional tool(s) not installed (non-critical)${NC}"
+            echo -e "${DIM}Install with: apt install nvtop${NC}"
+            echo ""
+        fi
+        exit 0
+    else
+        # Critical checks failed
+        echo -e "${YELLOW}⚠ SOME CHECKS FAILED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
+        echo -e "${GREEN}========================================${NC}"
+        echo ""
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "  1. Install drivers: Run 'nvidia-drivers'"
+        echo "  2. Reboot the system"
+        echo "  3. Run this verification again"
+        echo "  4. Check kernel logs: dmesg | grep -i nvidia"
+        echo ""
+        exit 1
+    fi
 fi

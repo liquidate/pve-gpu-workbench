@@ -333,6 +333,31 @@ if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" 
     fi
 fi
 
+# Optional: Install nvtop for GPU monitoring
+echo ""
+echo -e "${CYAN}>>> Optional: GPU Monitoring Tool${NC}"
+echo ""
+echo -e "${DIM}nvtop provides real-time GPU monitoring (like htop for GPUs)${NC}"
+echo -e "${DIM}Useful for monitoring GPU usage, temperature, and processes${NC}"
+echo ""
+
+read -r -p "Install nvtop? [Y/n]: " INSTALL_NVTOP
+INSTALL_NVTOP=${INSTALL_NVTOP:-Y}
+
+if [[ "$INSTALL_NVTOP" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo ">>> Installing nvtop..."
+    apt-get install -y nvtop >/dev/null 2>&1
+    if command -v nvtop &>/dev/null; then
+        echo -e "${GREEN}✓ nvtop installed${NC}"
+        echo -e "${DIM}Run 'nvtop' to monitor GPU in real-time${NC}"
+    else
+        echo -e "${YELLOW}⚠ nvtop installation failed (non-critical)${NC}"
+    fi
+else
+    echo -e "${DIM}Skipped. You can install later: apt install nvtop${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}>>> NVIDIA driver installation completed${NC}"
 echo -e "${YELLOW}⚠  Reboot required to load kernel module${NC}"

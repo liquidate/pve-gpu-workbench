@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Toggle power management settings
+# SCRIPT_CATEGORY: host-maintenance
 # SCRIPT_DETECT: systemctl is-active --quiet powertop.service && systemctl is-active --quiet autoaspm.service
 
 # Get script directory and source colors

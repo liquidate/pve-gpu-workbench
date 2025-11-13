@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Upgrade NVIDIA driver version
+# SCRIPT_CATEGORY: host-maintenance
 # SCRIPT_DETECT: 
 
 # Get script directory and source utilities

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Install AMD ROCm GPU drivers
+# SCRIPT_CATEGORY: host-setup
 # SCRIPT_DETECT: lsmod | grep -q amdgpu
 
 # Get script directory and source utilities

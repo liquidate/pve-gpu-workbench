@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Create Open WebUI LXC
+# SCRIPT_CATEGORY: lxc-ai
 # SCRIPT_DETECT: 
 
 # Creates an LXC container with Open WebUI that connects to existing Ollama instance

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Install NVIDIA CUDA drivers and modules
+# SCRIPT_CATEGORY: host-setup
 # SCRIPT_DETECT: command -v nvidia-smi &>/dev/null
 
 # Get script directory and source utilities

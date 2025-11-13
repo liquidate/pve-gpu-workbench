@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Verify AMD GPU setup and drivers
+# SCRIPT_CATEGORY: host-verify
 # SCRIPT_DETECT: false
 
 # Comprehensive AMD GPU Verification

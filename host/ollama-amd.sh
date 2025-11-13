@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Create Ollama LXC (AMD GPU)
+# SCRIPT_CATEGORY: lxc-ai
 # SCRIPT_DETECT: 
 
 # All-in-one script: Creates GPU-enabled LXC + Installs Ollama natively

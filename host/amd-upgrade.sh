@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Upgrade AMD ROCm to a different version
+# SCRIPT_CATEGORY: host-maintenance
 # SCRIPT_DETECT: [ -f /etc/apt/sources.list.d/rocm.list ]
 
 # Get script directory and source utilities

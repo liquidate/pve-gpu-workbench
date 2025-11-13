@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SCRIPT_DESC: Configure Strix Halo iGPU VRAM allocation
+# SCRIPT_CATEGORY: host-setup
 # SCRIPT_DETECT: grep -q "amdgpu.gttsize=" /proc/cmdline 2>/dev/null
 
 # Get script directory and source colors

@@ -368,18 +368,20 @@ display_numbered_script() {
     fi
     
     # Calculate padding for right-aligned status
-    # Format: "  N  command-name - Description...              [STATUS]"
-    # Total width: 67 chars (safe for most terminals)
+    # Format: "  N  command-name    - Description...           [STATUS]"
+    # Total width: 67 chars, command padded to 15 chars for alignment
     local total_width=67
+    local cmd_width=15
     local number_str=$(printf "%2s" "$number")
     
-    # Calculate how much space is used by fixed elements
-    # "  " + number (2) + "  " + command + " - " = 7 + len(command)
-    local fixed_len=$((7 + ${#script_command}))
-    local status_len=${#status_plain}
+    # Pad command name to fixed width for consistent alignment
+    local padded_cmd=$(printf "%-${cmd_width}s" "$script_command")
     
-    # Available space for description + padding + space before status
-    local available=$((total_width - fixed_len - status_len - 1))
+    # Calculate space for description
+    # "  " + number (2) + "  " + command (15) + " - " = 22 chars
+    local prefix_len=22
+    local status_len=${#status_plain}
+    local available=$((total_width - prefix_len - status_len - 1))
     
     # Truncate description if needed
     if [ ${#description} -gt $available ]; then
@@ -387,12 +389,11 @@ display_numbered_script() {
     fi
     
     # Calculate padding to right-align status
-    local content_len=$((fixed_len + ${#description}))
-    local padding_len=$((total_width - content_len - status_len - 1))
+    local padding_len=$((available - ${#description}))
     local padding=$(printf "%${padding_len}s" "")
     
-    # Display with number, command name (dim), description, and right-aligned status
-    echo -e "  ${CYAN}${number_str}${NC}  ${DIM}${script_command}${NC} - ${description}${padding} ${status_display}"
+    # Display with number, padded command name (dim), description, and right-aligned status
+    echo -e "  ${CYAN}${number_str}${NC}  ${DIM}${padded_cmd}${NC} - ${description}${padding} ${status_display}"
 }
 
 # Function to run a script
@@ -668,8 +669,8 @@ show_main_menu() {
         ((menu_index++))
     done
     
-    echo -e "  ${CYAN} u${NC}  ${DIM}update${NC}        - Update pve-gpu scripts from GitHub"
-    echo -e "  ${CYAN} i${NC}  ${DIM}info${NC}          - Show system information"
+    echo -e "  ${CYAN} u${NC}  ${DIM}$(printf "%-15s" "update")${NC} - Update pve-gpu scripts from GitHub"
+    echo -e "  ${CYAN} i${NC}  ${DIM}$(printf "%-15s" "info")${NC} - Show system information"
     echo ""
     
     # Show compact command help

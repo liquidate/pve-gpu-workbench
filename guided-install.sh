@@ -695,7 +695,7 @@ show_main_menu() {
     echo -e "${GREEN}MAINTENANCE${NC}"
     echo ""
     
-    # Add maintenance scripts (host-maintenance category)
+    # Add GPU-specific maintenance scripts (upgrade scripts)
     local maint_gpu_type=""
     [ "$HAS_AMD_GPU" = true ] && maint_gpu_type="amd"
     [ "$HAS_NVIDIA_GPU" = true ] && maint_gpu_type="nvidia"
@@ -706,6 +706,17 @@ show_main_menu() {
         MENU_MAP[$menu_index]="$cmd"
         MENU_NUMBERS+=("$menu_index")
         ((menu_index++))
+    done
+    
+    # Add universal maintenance scripts (like power management)
+    for cmd in $(get_scripts_by_category "host-maintenance" "all"); do
+        # Only show if GPU-agnostic (no amd/nvidia prefix or suffix)
+        if [[ "$cmd" != amd-* && "$cmd" != nvidia-* && "$cmd" != *-amd && "$cmd" != *-nvidia ]]; then
+            display_numbered_script "$menu_index" "$cmd"
+            MENU_MAP[$menu_index]="$cmd"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
     done
     
     echo -e "  ${CYAN} u${NC}  ${DIM}$(printf "%-15s" "update")${NC} - Update pve-gpu scripts from GitHub"

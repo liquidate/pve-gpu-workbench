@@ -136,7 +136,7 @@ cp templates/lxc-nvidia-template.sh host/mynewapp-nvidia.sh
 
 4. **Done!** Menu automatically shows it under "DEPLOY CONTAINERS (Media & Photos)"
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`PLUGIN_ARCHITECTURE.md`](PLUGIN_ARCHITECTURE.md) for details.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/plugin-architecture.md`](docs/plugin-architecture.md) for details.
 
 ## What Gets Installed
 
@@ -234,9 +234,9 @@ proxmox-setup-scripts/
 
 ## Documentation
 
-- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) - Shared library system
-- [`PLUGIN_ARCHITECTURE.md`](PLUGIN_ARCHITECTURE.md) - Plugin design and categories
-- [`FORK_ACKNOWLEDGMENT.md`](FORK_ACKNOWLEDGMENT.md) - Project history and divergence
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - Shared library system
+- [`docs/plugin-architecture.md`](docs/plugin-architecture.md) - Plugin design and categories
+- [`docs/fork-acknowledgment.md`](docs/fork-acknowledgment.md) - Project history and divergence
 
 ## Acknowledgments
 

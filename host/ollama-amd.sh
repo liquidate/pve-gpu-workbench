@@ -7,10 +7,14 @@
 
 set -e
 
-# Get script directory and source utilities
+# Get script directory and source shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/colors.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../includes/progress.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../includes/logging.sh"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Ollama LXC Creation${NC}"
@@ -40,16 +44,13 @@ if ! lspci -nn | grep -i "VGA\|3D\|Display" | grep -qi amd; then
 fi
 echo -e "${GREEN}✓ AMD GPU detected${NC}"
 
-# Prepare for installation
-LOG_FILE="/tmp/ollama-lxc-install-$(date +%Y%m%d-%H%M%S).log"
+# Setup logging
+setup_logging "ollama-lxc-install" "Ollama AMD LXC Installation"
 
 # Clean up old log files (keep only the 5 most recent)
 if ls /tmp/ollama-lxc-install-*.log 1> /dev/null 2>&1; then
     ls -t /tmp/ollama-lxc-install-*.log | tail -n +6 | xargs -r rm -f
 fi
-
-# Initialize log file
-echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
 
 # Error handler - called on any error
 error_handler() {
@@ -84,50 +85,6 @@ error_handler() {
 
 # Set up error trap
 trap 'error_handler $LINENO' ERR
-
-# Progress indicator functions
-show_progress() {
-    local step=$1
-    local total=$2
-    local message=$3
-    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
-}
-
-complete_progress() {
-    echo -e "\r\033[K${GREEN}✓${NC} $1"
-}
-
-# Spinner for long-running commands
-SPINNER_PID=""
-start_spinner() {
-    local message="$1"
-    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-    
-    # Hide cursor
-    tput civis
-    
-    (
-        local i=0
-        while true; do
-            local char="${spinner_chars:$i:1}"
-            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
-            i=$(( (i + 1) % ${#spinner_chars} ))
-            sleep 0.1
-        done
-    ) &
-    SPINNER_PID=$!
-}
-
-stop_spinner() {
-    if [ -n "$SPINNER_PID" ]; then
-        kill "$SPINNER_PID" 2>/dev/null || true
-        wait "$SPINNER_PID" 2>/dev/null || true
-        SPINNER_PID=""
-    fi
-    echo -ne "\r\033[K"
-    # Show cursor
-    tput cnorm
-}
 
 echo ""
 echo -e "${CYAN}>>> Calculating recommended configuration...${NC}"

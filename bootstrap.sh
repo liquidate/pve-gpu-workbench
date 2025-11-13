@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# Proxmox GPU Setup Scripts - Bootstrap Installer
+# PVE GPU Workbench - Bootstrap Installer
 # 
 # Usage:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/feature/gpu-detection-improvements/bootstrap.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/pve-gpu-workbench/main/bootstrap.sh)"
 #
 
 set -e
 
-REPO_URL="https://github.com/liquidate/proxmox-setup-scripts.git"
-REPO_BRANCH="feature/gpu-detection-improvements"
+REPO_URL="https://github.com/liquidate/pve-gpu-workbench.git"
+REPO_BRANCH="main"
 INSTALL_DIR="/root/proxmox-setup-scripts"
 
 # Colors for output
@@ -21,7 +21,7 @@ NC='\033[0m'
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Proxmox GPU Setup - Installer      ║${NC}"
+echo -e "${GREEN}║  PVE GPU Workbench - Installer      ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
 echo ""
 

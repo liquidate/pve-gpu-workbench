@@ -56,7 +56,7 @@ discover_scripts() {
 }
 
 # Real-time status check functions (using command names)
-check_status_strix-igpu() {
+check_status_amd-strix-igpu() {
     # Check if Strix Halo iGPU VRAM allocation is configured (amdgpu.gttsize in kernel cmdline)
     if grep -q "amdgpu.gttsize=" /proc/cmdline 2>/dev/null; then
         # Show current allocation
@@ -478,8 +478,8 @@ get_host_scripts() {
         "universal")
             # Scripts that work with any GPU (like gpu-udev)
             for cmd in $(get_scripts_by_category "host-setup" "all"); do
-                # Only show if it's GPU-agnostic (no -amd or -nvidia suffix)
-                if [[ "$cmd" != *-amd && "$cmd" != *-nvidia ]]; then
+                # Only show if it's GPU-agnostic (no amd/nvidia prefix or suffix)
+                if [[ "$cmd" != amd-* && "$cmd" != nvidia-* && "$cmd" != *-amd && "$cmd" != *-nvidia ]]; then
                     echo "$cmd"
                 fi
             done
@@ -953,11 +953,51 @@ while true; do
     
     case "$choice" in
         "setup"|"all")  # Accept both "setup" and legacy "all"
+            # Setup comprehensive logging
+            SETUP_LOG="/tmp/pve-gpu-setup-$(date +%Y%m%d-%H%M%S).log"
+            
+            # Initialize log file
+            {
+                echo "═══════════════════════════════════════════════════════════"
+                echo "PVE GPU Workbench - Setup Log"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Started: $(date)"
+                echo "Hostname: $(hostname)"
+                echo ""
+                echo "GPU Detection:"
+                echo "  HAS_AMD_GPU: $HAS_AMD_GPU"
+                echo "  HAS_NVIDIA_GPU: $HAS_NVIDIA_GPU"
+                echo ""
+                echo "Detected Hardware:"
+                lspci -nn | grep -i "VGA\|3D\|Display"
+                echo ""
+                echo "AMD scripts queued:"
+                get_host_scripts "amd" | sed 's/^/  - /'
+                [ -z "$(get_host_scripts "amd")" ] && echo "  (none)"
+                echo ""
+                echo "NVIDIA scripts queued:"
+                get_host_scripts "nvidia" | sed 's/^/  - /'
+                [ -z "$(get_host_scripts "nvidia")" ] && echo "  (none)"
+                echo ""
+                echo "Universal scripts queued:"
+                get_host_scripts "universal" | sed 's/^/  - /'
+                [ -z "$(get_host_scripts "universal")" ] && echo "  (none)"
+                echo ""
+                echo "═══════════════════════════════════════════════════════════"
+                echo ""
+            } > "$SETUP_LOG"
+            
+            # Function to log to both console and file
+            setup_log() {
+                echo "$@" | tee -a "$SETUP_LOG"
+            }
+            
             echo ""
             echo -e "${GREEN}========================================${NC}"
             echo -e "${GREEN}Running GPU Setup scripts...${NC}"
             echo -e "${GREEN}========================================${NC}"
             echo ""
+            echo -e "${CYAN}📋 Setup Log:${NC} $SETUP_LOG"
             echo -e "${YELLOW}You will be asked before each script runs.${NC}"
             echo -e "${YELLOW}Press 'y' to run, 'n' to skip, or 'q' to return to main menu.${NC}"
             echo ""
@@ -968,87 +1008,127 @@ while true; do
             
             # Run all AMD host scripts
             if [ "$HAS_AMD_GPU" = true ]; then
+                echo "[$(date +%H:%M:%S)] Starting AMD host scripts..." >> "$SETUP_LOG"
                 for cmd in $(get_host_scripts "amd"); do
+                    echo "[$(date +%H:%M:%S)] Prompting: $cmd" >> "$SETUP_LOG"
                     confirm_run_with_info "$cmd"
                     result=$?
                     
                     if [ $result -eq 2 ]; then
+                        echo "[$(date +%H:%M:%S)] User quit at: $cmd" >> "$SETUP_LOG"
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
+                        echo "[$(date +%H:%M:%S)] Running: $cmd" >> "$SETUP_LOG"
                         run_script "$cmd"
                         script_exit=$?
                         if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
+                            echo "[$(date +%H:%M:%S)] SUCCESS: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             ((scripts_run++))
                             # Check if script returned exit code 3 (reboot needed)
                             if [ $script_exit -eq 3 ]; then
                                 reboot_needed=true
                             fi
                         else
+                            echo "[$(date +%H:%M:%S)] FAILED: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
                             [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
                         fi
+                    else
+                        echo "[$(date +%H:%M:%S)] Skipped: $cmd" >> "$SETUP_LOG"
                     fi
                 done
+            else
+                echo "[$(date +%H:%M:%S)] Skipping AMD scripts (no AMD GPU detected)" >> "$SETUP_LOG"
             fi
             
             # Run all NVIDIA host scripts
             if [ "$quit_requested" = false ] && [ "$HAS_NVIDIA_GPU" = true ]; then
+                echo "[$(date +%H:%M:%S)] Starting NVIDIA host scripts..." >> "$SETUP_LOG"
                 for cmd in $(get_host_scripts "nvidia"); do
+                    echo "[$(date +%H:%M:%S)] Prompting: $cmd" >> "$SETUP_LOG"
                     confirm_run_with_info "$cmd"
                     result=$?
                     
                     if [ $result -eq 2 ]; then
+                        echo "[$(date +%H:%M:%S)] User quit at: $cmd" >> "$SETUP_LOG"
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
+                        echo "[$(date +%H:%M:%S)] Running: $cmd" >> "$SETUP_LOG"
                         run_script "$cmd"
                         script_exit=$?
                         if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
+                            echo "[$(date +%H:%M:%S)] SUCCESS: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             ((scripts_run++))
                             # Check if script returned exit code 3 (reboot needed)
                             if [ $script_exit -eq 3 ]; then
                                 reboot_needed=true
                             fi
                         else
+                            echo "[$(date +%H:%M:%S)] FAILED: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
                             [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
                         fi
+                    else
+                        echo "[$(date +%H:%M:%S)] Skipped: $cmd" >> "$SETUP_LOG"
                     fi
                 done
+            elif [ "$quit_requested" = false ]; then
+                echo "[$(date +%H:%M:%S)] Skipping NVIDIA scripts (no NVIDIA GPU detected)" >> "$SETUP_LOG"
             fi
             
             # Run universal host scripts
             if [ "$quit_requested" = false ]; then
+                echo "[$(date +%H:%M:%S)] Starting universal host scripts..." >> "$SETUP_LOG"
                 for cmd in $(get_host_scripts "universal"); do
+                    echo "[$(date +%H:%M:%S)] Prompting: $cmd" >> "$SETUP_LOG"
                     confirm_run_with_info "$cmd"
                     result=$?
                     
                     if [ $result -eq 2 ]; then
+                        echo "[$(date +%H:%M:%S)] User quit at: $cmd" >> "$SETUP_LOG"
                         quit_requested=true
                         break
                     elif [ $result -eq 0 ]; then
+                        echo "[$(date +%H:%M:%S)] Running: $cmd" >> "$SETUP_LOG"
                         run_script "$cmd"
                         script_exit=$?
                         if [ $script_exit -eq 0 ] || [ $script_exit -eq 3 ]; then
+                            echo "[$(date +%H:%M:%S)] SUCCESS: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             ((scripts_run++))
                             # Check if script returned exit code 3 (reboot needed)
                             if [ $script_exit -eq 3 ]; then
                                 reboot_needed=true
                             fi
                         else
+                            echo "[$(date +%H:%M:%S)] FAILED: $cmd (exit: $script_exit)" >> "$SETUP_LOG"
                             read -r -p "Script failed. Continue? [y/N]: " continue_choice < /dev/tty
                             [[ ! "$continue_choice" =~ ^[Yy]$ ]] && break
                         fi
+                    else
+                        echo "[$(date +%H:%M:%S)] Skipped: $cmd" >> "$SETUP_LOG"
                     fi
                 done
             fi
             
             if [ "$quit_requested" = false ]; then
+                # Log completion
+                {
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "Setup Completed: $(date)"
+                    echo "Scripts Run: $scripts_run"
+                    echo "Reboot Needed: $reboot_needed"
+                    echo "═══════════════════════════════════════════════════════════"
+                } >> "$SETUP_LOG"
+                
                 echo ""
                 echo -e "${GREEN}========================================${NC}"
                 echo -e "${GREEN}GPU Setup completed!${NC}"
                 echo -e "${GREEN}========================================${NC}"
+                echo ""
+                echo -e "${CYAN}📋 Full setup log: $SETUP_LOG${NC}"
                 echo ""
                 
                 if [ "$scripts_run" -eq 0 ]; then
@@ -1092,6 +1172,21 @@ while true; do
                     echo ""
                 fi
                 
+                read -r -p "Press Enter to continue..." < /dev/tty
+            else
+                # Log early quit
+                {
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "Setup Quit: $(date)"
+                    echo "User quit early (scripts run: $scripts_run)"
+                    echo "═══════════════════════════════════════════════════════════"
+                } >> "$SETUP_LOG"
+                
+                echo ""
+                echo -e "${YELLOW}Setup cancelled by user${NC}"
+                echo -e "${CYAN}📋 Partial setup log: $SETUP_LOG${NC}"
+                echo ""
                 read -r -p "Press Enter to continue..." < /dev/tty
             fi
             ;;

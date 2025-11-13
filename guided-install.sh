@@ -683,7 +683,7 @@ show_main_menu() {
 show_system_info() {
     clear
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}                        System Information Dashboard                               ${GREEN}║${NC}"
+    echo -e "${GREEN}║${NC}                        System Information Dashboard                          ${GREEN}║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     

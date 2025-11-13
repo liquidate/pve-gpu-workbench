@@ -844,6 +844,35 @@ GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
 # Pause to let user read the final step
 sleep 3
 
+# Set container notes with access info
+start_progress "Setting container notes"
+{
+    pct set $CONTAINER_ID --description "Ollama - Local AI Model Server (AMD GPU)
+
+🚀 API: http://$IP_ADDRESS:11434
+🎮 GPU: $GPU_VERIFY_DETAILS
+
+🔄 Update Ollama:
+  ssh root@$IP_ADDRESS
+  update
+
+🧪 Test:
+  ssh root@$IP_ADDRESS
+  ollama run llama3.2:3b
+
+🔍 Verify GPU:
+  ssh root@$IP_ADDRESS
+  gpu-verify
+
+📊 Monitor GPU:
+  ssh root@$IP_ADDRESS
+  radeontop
+
+🔑 Root password: $ROOT_PASSWORD
+"
+} >> "$LOG_FILE" 2>&1
+complete_progress "Container notes updated"
+
 # Clear screen and show completion message
 clear
 echo ""

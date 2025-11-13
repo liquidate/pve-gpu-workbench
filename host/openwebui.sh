@@ -445,6 +445,29 @@ SERVICEEOF'
 
 complete_progress "Open WebUI configured and running"
 
+# Set container notes with access info
+start_progress "Setting container notes"
+{
+    pct set $CONTAINER_ID --description "Open WebUI - AI Chat Interface
+
+🌐 Web UI: http://$IP_ADDRESS:8080
+📡 Connected to: http://${OLLAMA_IP}:11434
+
+🔄 Update:
+  ssh root@$IP_ADDRESS
+  systemctl stop open-webui
+  /root/.local/bin/uv tool install --python 3.12 open-webui[all]
+  systemctl start open-webui
+
+📊 Status:
+  systemctl status open-webui
+  journalctl -u open-webui -f
+
+🔑 Root password: $ROOT_PASSWORD
+"
+} >> "$LOG_FILE" 2>&1
+complete_progress "Container notes updated"
+
 # Clear screen and show completion message
 clear
 echo ""

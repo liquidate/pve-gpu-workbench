@@ -459,6 +459,10 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo "  Container ID: $CONTAINER_ID | IP: $IP_ADDRESS"
 echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
 echo ""
+echo -e "${CYAN}📋 Installation Log:${NC}"
+echo "  File: $LOG_FILE"
+echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
+echo ""
 show_progress 1 $TOTAL_STEPS "Creating container"
 
 {

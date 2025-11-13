@@ -99,7 +99,7 @@ done
 CONTAINER_ID=$NEXT_ID
 
 # Determine hostname
-BASE_HOSTNAME="ollama"
+BASE_HOSTNAME="ollama-amd"
 if pct list 2>/dev/null | grep -q "[[:space:]]${BASE_HOSTNAME}[[:space:]]"; then
     SUFFIX=2
     while pct list 2>/dev/null | grep -q "[[:space:]]${BASE_HOSTNAME}-${SUFFIX}[[:space:]]"; do

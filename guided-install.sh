@@ -548,7 +548,7 @@ show_main_menu() {
     
     # Build menu dynamically (78 char width to match menu items)
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                    Proxmox GPU Management ${DIM}(pve-gpu)${NC}${GREEN}                     ║${NC}"
+    echo -e "${GREEN}║${NC}                    Proxmox GPU Management ${DIM}(pve-gpu)${NC}                     ${GREEN}║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
@@ -683,7 +683,7 @@ show_main_menu() {
 show_system_info() {
     clear
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                        System Information Dashboard                          ║${NC}"
+    echo -e "${GREEN}║${NC}                        System Information Dashboard                          ${GREEN}║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     

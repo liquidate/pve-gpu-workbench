@@ -9,6 +9,16 @@ source "${SCRIPT_DIR}/../includes/colors.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
 
+# Setup logging
+LOG_FILE="/tmp/nvidia-upgrade-$(date +%Y%m%d-%H%M%S).log"
+{
+    echo "==================================="
+    echo "NVIDIA Driver Upgrade Log"
+    echo "Started: $(date)"
+    echo "==================================="
+    echo ""
+} > "$LOG_FILE"
+
 # Check if NVIDIA GPU is present
 if ! detect_nvidia_gpus; then
     echo -e "${YELLOW}========================================${NC}"
@@ -19,6 +29,10 @@ if ! detect_nvidia_gpus; then
 fi
 
 echo -e "${GREEN}>>> NVIDIA Driver Upgrade${NC}"
+echo ""
+echo -e "${CYAN}📋 Upgrade Log:${NC}"
+echo "  File: $LOG_FILE"
+echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
 
 # Check current driver version and installed packages
@@ -70,7 +84,8 @@ fi
 # Update package cache
 echo ""
 echo -e "${CYAN}>>> Checking available driver versions...${NC}"
-apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
+apt-get update -qq >> "$LOG_FILE" 2>&1
+echo "  ✓ Package cache updated"
 
 # Fetch available driver versions from nvidia-driver package versions
 AVAILABLE_VERSIONS=$(apt-cache policy nvidia-driver 2>/dev/null | \
@@ -262,14 +277,24 @@ echo ""
 
 # Remove old driver and kernel module packages
 echo ">>> Removing old driver packages..."
-apt-get remove -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-open-dkms 2>&1 | grep -v "Policy will reject signature" || true
+apt-get remove -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-open-dkms >> "$LOG_FILE" 2>&1 || true
+echo "  ✓ Old packages removed"
 
 # Install new driver
 echo ">>> Installing NVIDIA driver ${NEW_VERSION}..."
+echo -e "${DIM}This may take a few minutes...${NC}"
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nvidia-driver=${NEW_VERSION} \
     ${NEW_KERNEL_MODULE}=${NEW_VERSION} \
-    nvidia-driver-cuda=${NEW_VERSION}
+    nvidia-driver-cuda=${NEW_VERSION} >> "$LOG_FILE" 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "  ✓ Driver packages installed"
+else
+    echo -e "${RED}  ✗ Driver installation failed${NC}"
+    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
+    exit 1
+fi
 
 # Handle MOK enrollment if switching to open kernel module with Secure Boot
 if [ "$NEW_KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && \
@@ -363,6 +388,9 @@ fi
 echo ""
 echo -e "${GREEN}>>> NVIDIA driver upgrade completed${NC}"
 echo -e "${YELLOW}⚠  Reboot required to load new driver version${NC}"
+echo ""
+echo -e "${CYAN}📋 Full upgrade log saved to:${NC}"
+echo "  $LOG_FILE"
 echo ""
 echo -e "${CYAN}After reboot, verify with: nvidia-smi${NC}"
 echo ""

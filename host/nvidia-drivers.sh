@@ -9,6 +9,17 @@ source "${SCRIPT_DIR}/../includes/colors.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
 
+# Setup logging
+LOG_FILE="/tmp/nvidia-drivers-install-$(date +%Y%m%d-%H%M%S).log"
+exec 3>&1 4>&2  # Save stdout and stderr
+{
+    echo "==================================="
+    echo "NVIDIA Drivers Installation Log"
+    echo "Started: $(date)"
+    echo "==================================="
+    echo ""
+} > "$LOG_FILE"
+
 # Check if NVIDIA GPU is present
 if ! detect_nvidia_gpus; then
     echo -e "${YELLOW}========================================${NC}"
@@ -29,12 +40,17 @@ if ! detect_nvidia_gpus; then
 fi
 
 echo -e "${GREEN}>>> Installing NVIDIA drivers${NC}"
+echo ""
+echo -e "${CYAN}📋 Installation Log:${NC}"
+echo "  File: $LOG_FILE"
+echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
+echo ""
 
 # Ensure required tools are available
 for tool in wget; do
     if ! command -v $tool &>/dev/null; then
         echo ">>> Installing required tool: $tool"
-        apt-get update -qq && apt-get install -y $tool >/dev/null 2>&1
+        apt-get update -qq >> "$LOG_FILE" 2>&1 && apt-get install -y $tool >> "$LOG_FILE" 2>&1
     fi
 done
 
@@ -53,8 +69,9 @@ fi
 
 # Install prerequisites first
 echo ">>> Installing prerequisites..."
-apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
-apt-get install -y proxmox-headers-"$(uname -r)" wget 2>&1 | grep -v "Policy will reject signature"
+apt-get update -qq >> "$LOG_FILE" 2>&1
+apt-get install -y proxmox-headers-"$(uname -r)" wget >> "$LOG_FILE" 2>&1
+echo "  ✓ Prerequisites installed"
 
 # Enable Debian non-free repository (required for nvidia-driver packages)
 echo ">>> Enabling Debian non-free repository..."
@@ -66,13 +83,16 @@ fi
 # Add NVIDIA CUDA repository
 if [ ! -f /etc/apt/sources.list.d/cuda-debian12-x86_64.list ]; then
     echo ">>> Adding NVIDIA CUDA repository..."
-    wget -q https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
-    dpkg -i cuda-keyring_1.1-1_all.deb
+    wget -q https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb >> "$LOG_FILE" 2>&1
+    dpkg -i cuda-keyring_1.1-1_all.deb >> "$LOG_FILE" 2>&1
     rm cuda-keyring_1.1-1_all.deb
+    echo "  ✓ Repository added"
 fi
 
 # Update package cache with new repositories
-apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
+echo ">>> Updating package cache..."
+apt-get update -qq >> "$LOG_FILE" 2>&1
+echo "  ✓ Cache updated"
 
 # Fetch available driver versions from nvidia-driver package versions
 echo ""
@@ -233,14 +253,24 @@ esac
 echo ""
 echo -e "${CYAN}>>> Installing NVIDIA driver ${DRIVER_VERSION} (branch ${DRIVER_BRANCH})${NC}"
 echo -e "${DIM}Kernel module: ${KERNEL_MODULE}${NC}"
+echo -e "${DIM}This may take a few minutes...${NC}"
 echo ""
 
 # Install full driver stack
 # Note: nvidia-driver-cuda provides nvidia-smi and CUDA integration for all versions
+echo "Installing driver packages..." >> "$LOG_FILE"
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nvidia-driver=${DRIVER_VERSION} \
     ${KERNEL_MODULE}=${DRIVER_VERSION} \
-    nvidia-driver-cuda=${DRIVER_VERSION}
+    nvidia-driver-cuda=${DRIVER_VERSION} >> "$LOG_FILE" 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "  ✓ Driver packages installed"
+else
+    echo -e "${RED}  ✗ Driver installation failed${NC}"
+    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
+    exit 1
+fi
 
 # Handle MOK enrollment for open kernel module with Secure Boot
 if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" = true ]; then
@@ -347,7 +377,7 @@ INSTALL_NVTOP=${INSTALL_NVTOP:-Y}
 if [[ "$INSTALL_NVTOP" =~ ^[Yy]$ ]]; then
     echo ""
     echo ">>> Installing nvtop..."
-    apt-get install -y nvtop >/dev/null 2>&1
+    apt-get install -y nvtop >> "$LOG_FILE" 2>&1
     if command -v nvtop &>/dev/null; then
         echo -e "${GREEN}✓ nvtop installed${NC}"
         echo -e "${DIM}Run 'nvtop' to monitor GPU in real-time${NC}"
@@ -361,6 +391,9 @@ fi
 echo ""
 echo -e "${GREEN}>>> NVIDIA driver installation completed${NC}"
 echo -e "${YELLOW}⚠  Reboot required to load kernel module${NC}"
+echo ""
+echo -e "${CYAN}📋 Full installation log saved to:${NC}"
+echo "  $LOG_FILE"
 echo ""
 
 exit 3  # Exit code 3 = success but reboot required

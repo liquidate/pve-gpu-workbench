@@ -65,7 +65,7 @@ else
     echo ""
     exit 1
 fi
-echo ""
+    echo ""
 
 echo -e "${CYAN}═══ KERNEL & DRIVER ═══${NC}"
 # Check if nvidia drivers are installed
@@ -183,13 +183,13 @@ echo -e "${CYAN}═══ FUNCTIONAL TESTS ═══${NC}"
 if command -v nvidia-smi >/dev/null 2>&1; then
     if nvidia-smi &>/dev/null; then
         check_result 0 "nvidia-smi functional"
-        echo ""
+echo ""
         echo -e "${CYAN}GPU Information:${NC}"
         nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader 2>/dev/null | sed 's/^/  GPU /' || echo "  Unable to query GPU"
-        echo ""
+    echo ""
         echo -e "${CYAN}Full nvidia-smi output:${NC}"
         nvidia-smi 2>/dev/null | sed 's/^/  /'
-    else
+else
         check_result 1 "nvidia-smi not working"
         echo -e "${YELLOW}  → Check driver installation and reboot if needed${NC}"
     fi
@@ -236,7 +236,7 @@ else
     else
         # Critical checks failed
         echo -e "${YELLOW}⚠ SOME CHECKS FAILED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
-        echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}========================================${NC}"
         echo ""
         echo -e "${YELLOW}Troubleshooting:${NC}"
         echo "  1. Install drivers: Run 'nvidia-drivers'"

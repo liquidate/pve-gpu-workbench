@@ -7,6 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/colors.sh"
 
+# Setup logging
+LOG_FILE="/tmp/amd-upgrade-$(date +%Y%m%d-%H%M%S).log"
+{
+    echo "==================================="
+    echo "AMD ROCm Upgrade Log"
+    echo "Started: $(date)"
+    echo "==================================="
+    echo ""
+} > "$LOG_FILE"
+
 # Check if ROCm is installed
 if ! [ -f /etc/apt/sources.list.d/rocm.list ]; then
     echo -e "${RED}========================================${NC}"
@@ -23,6 +33,10 @@ CURRENT_VERSION=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/r
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}AMD ROCm Version Upgrade${NC}"
 echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "${CYAN}📋 Upgrade Log:${NC}"
+echo "  File: $LOG_FILE"
+echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
 echo -e "${CYAN}Current ROCm version: ${CURRENT_VERSION}${NC}"
 echo ""
@@ -96,10 +110,20 @@ deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/gr
 EOF
 
 echo ">>> Updating package lists with new ROCm repository"
-apt update
+apt update >> "$LOG_FILE" 2>&1
+echo "  ✓ Package cache updated"
 
 echo ">>> Upgrading ROCm packages"
-apt install -y --allow-downgrades rocm-smi rocminfo rocm-libs
+echo -e "${DIM}This may take a few minutes...${NC}"
+apt install -y --allow-downgrades rocm-smi rocminfo rocm-libs >> "$LOG_FILE" 2>&1
+
+if command -v rocm-smi &>/dev/null; then
+    echo "  ✓ ROCm packages upgraded"
+else
+    echo -e "${RED}  ✗ ROCm upgrade failed${NC}"
+    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
+    exit 1
+fi
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -109,6 +133,9 @@ echo ""
 echo -e "${CYAN}New version: ${NEW_VERSION}${NC}"
 echo ""
 echo -e "${YELLOW}⚠  Reboot recommended to ensure all changes take effect${NC}"
+echo ""
+echo -e "${CYAN}📋 Full upgrade log saved to:${NC}"
+echo "  $LOG_FILE"
 echo ""
 echo "Run 'amd-verify' after reboot to verify the upgrade."
 

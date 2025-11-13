@@ -9,6 +9,16 @@ source "${SCRIPT_DIR}/../includes/colors.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
 
+# Setup logging
+LOG_FILE="/tmp/amd-drivers-install-$(date +%Y%m%d-%H%M%S).log"
+{
+    echo "==================================="
+    echo "AMD ROCm Drivers Installation Log"
+    echo "Started: $(date)"
+    echo "==================================="
+    echo ""
+} > "$LOG_FILE"
+
 # Check if AMD GPU is present
 if ! detect_amd_gpus; then
     echo -e "${YELLOW}========================================${NC}"
@@ -29,12 +39,17 @@ if ! detect_amd_gpus; then
 fi
 
 echo -e "${GREEN}>>> Installing AMD ROCm drivers${NC}"
+echo ""
+echo -e "${CYAN}📋 Installation Log:${NC}"
+echo "  File: $LOG_FILE"
+echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
+echo ""
 
 # Ensure required tools are available
 for tool in curl wget gpg; do
     if ! command -v $tool &>/dev/null; then
         echo ">>> Installing required tool: $tool"
-        apt-get update -qq && apt-get install -y $tool >/dev/null 2>&1
+        apt-get update -qq >> "$LOG_FILE" 2>&1 && apt-get install -y $tool >> "$LOG_FILE" 2>&1
     fi
 done
 
@@ -93,8 +108,9 @@ echo -e "${CYAN}>>> Installing ROCm ${ROCM_VERSION}${NC}"
 echo ">>> Adding AMD ROCm ${ROCM_VERSION} repository"
 mkdir --parents /etc/apt/keyrings
 chmod 0755 /etc/apt/keyrings
-wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
-gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
+wget https://repo.radeon.com/rocm/rocm.gpg.key -O - 2>> "$LOG_FILE" | \
+gpg --dearmor 2>> "$LOG_FILE" | tee /etc/apt/keyrings/rocm.gpg >> "$LOG_FILE"
+echo "  ✓ Repository GPG key added"
 
 tee /etc/apt/sources.list.d/rocm.list << EOF
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main
@@ -108,11 +124,21 @@ Pin-Priority: 600
 EOF
 
 echo ">>> Updating package lists after adding ROCm repository"
-apt update
+apt update >> "$LOG_FILE" 2>&1
+echo "  ✓ Package cache updated"
 
 echo ">>> Installing AMD ROCm drivers and tools"
-apt install -y rocm-smi rocminfo rocm-libs
-apt install -y nvtop radeontop
+echo -e "${DIM}This may take a few minutes...${NC}"
+apt install -y rocm-smi rocminfo rocm-libs >> "$LOG_FILE" 2>&1
+apt install -y nvtop radeontop >> "$LOG_FILE" 2>&1
+
+if command -v rocm-smi &>/dev/null; then
+    echo "  ✓ ROCm drivers installed"
+else
+    echo -e "${RED}  ✗ ROCm installation failed${NC}"
+    echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
+    exit 1
+fi
 
 echo ">>> Adding root user to render and video groups for GPU access"
 usermod -a -G render,video root
@@ -133,5 +159,9 @@ source /etc/profile.d/rocm.sh
 
 echo ">>> AMD ROCm driver installation completed."
 echo -e "${YELLOW}⚠  Reboot recommended to ensure all drivers are loaded${NC}"
+echo ""
+echo -e "${CYAN}📋 Full installation log saved to:${NC}"
+echo "  $LOG_FILE"
+echo ""
 
 exit 3  # Exit code 3 = success but reboot required

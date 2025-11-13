@@ -368,21 +368,27 @@ display_numbered_script() {
     fi
     
     # Calculate padding for right-aligned status
-    # Format: "  1  command-name  - Description...              [STATUS]"
-    # Total width: 63 chars (fits in narrower terminals with emoji sections)
-    local line_width=63
+    # Format: "  N  command-name - Description...              [STATUS]"
+    # Total width: 67 chars (safe for most terminals)
+    local total_width=67
     local number_str=$(printf "%2s" "$number")
-    local prefix_len=$((${#script_command} + 9))  # "  N  command - "
+    
+    # Calculate how much space is used by fixed elements
+    # "  " + number (2) + "  " + command + " - " = 7 + len(command)
+    local fixed_len=$((7 + ${#script_command}))
     local status_len=${#status_plain}
-    local desc_max_len=$((line_width - prefix_len - status_len))
+    
+    # Available space for description + padding + space before status
+    local available=$((total_width - fixed_len - status_len - 1))
     
     # Truncate description if needed
-    if [ ${#description} -gt $desc_max_len ]; then
-        description="${description:0:$((desc_max_len - 3))}..."
+    if [ ${#description} -gt $available ]; then
+        description="${description:0:$((available - 3))}..."
     fi
     
-    # Calculate padding
-    local padding_len=$((desc_max_len - ${#description}))
+    # Calculate padding to right-align status
+    local content_len=$((fixed_len + ${#description}))
+    local padding_len=$((total_width - content_len - status_len - 1))
     local padding=$(printf "%${padding_len}s" "")
     
     # Display with number, command name (dim), description, and right-aligned status
@@ -662,8 +668,8 @@ show_main_menu() {
         ((menu_index++))
     done
     
-    echo -e "  ${CYAN}u${NC}            - Update pve-gpu scripts from GitHub"
-    echo -e "  ${CYAN}i${NC}            - Show system information"
+    echo -e "  ${CYAN} u${NC}  ${DIM}update${NC}        - Update pve-gpu scripts from GitHub"
+    echo -e "  ${CYAN} i${NC}  ${DIM}info${NC}          - Show system information"
     echo ""
     
     # Show compact command help

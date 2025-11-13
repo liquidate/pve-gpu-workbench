@@ -583,6 +583,8 @@ show_progress 11 $TOTAL_STEPS "Configuring Ollama service"
     pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << '\''EOFMARKER'\''
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="LD_LIBRARY_PATH=/usr/lib/ollama:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu"
+Environment="PATH=/usr/local/cuda-12.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EOFMARKER'
 
     pct exec $CONTAINER_ID -- systemctl daemon-reload

@@ -435,8 +435,9 @@ pct exec $CONTAINER_ID -- bash -c "
     # Install uv
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
-    # Install Open WebUI without extras (no CUDA/torch dependencies)
-    # All AI processing happens in the Ollama container, not here
+    # Install Open WebUI (includes sentence-transformers + PyTorch/CUDA for local embeddings)
+    # Increase timeout for large packages (torch is 858MB)
+    export UV_HTTP_TIMEOUT=300
     /root/.local/bin/uv tool install --python 3.12 open-webui
 " >> "$LOG_FILE" 2>&1
 

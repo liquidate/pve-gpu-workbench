@@ -468,34 +468,47 @@ show_progress 6 $TOTAL_STEPS "Updating system packages"
     PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
     
     if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'"
+        echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
+        echo -ne "\r\033[K${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages..."
+        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
     fi
-} >> "$LOG_FILE" 2>&1
+} 
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 show_progress 7 $TOTAL_STEPS "Installing Ollama and NVIDIA utilities"
 
 {
-    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
+    echo "Installing prerequisites..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing prerequisites..."
+    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
     
     # Detect host NVIDIA driver version
     HOST_DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d'.' -f1)
     
     # Install NVIDIA CUDA keyring and drivers (for nvidia-smi)
+    echo "Adding NVIDIA CUDA repository..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Adding NVIDIA CUDA repository..."
     pct exec $CONTAINER_ID -- bash -c "
         wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
         dpkg -i cuda-keyring_1.1-1_all.deb
         rm cuda-keyring_1.1-1_all.deb
         apt-get update -qq 2>&1 | grep -v 'Policy will reject signature'
+    " >> "$LOG_FILE" 2>&1
+    
+    echo "Installing NVIDIA utilities and CUDA toolkit (~3GB download)..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing NVIDIA utilities (~3GB, please wait)..."
+    pct exec $CONTAINER_ID -- bash -c "
         apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature' || {
             # Fallback: If specific version not found, try generic nvidia-utils
             apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature'
         }
-    "
+    " >> "$LOG_FILE" 2>&1
     
     # Install Ollama
-    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
-} >> "$LOG_FILE" 2>&1
+    echo "Installing Ollama..." >> "$LOG_FILE"
+    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing Ollama..."
+    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
+}
 
 complete_progress "Ollama and NVIDIA utilities installed"
 show_progress 8 $TOTAL_STEPS "Configuring Ollama service"

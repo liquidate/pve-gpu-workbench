@@ -520,7 +520,7 @@ pct exec $CONTAINER_ID -- bash -c "
     wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
     dpkg -i cuda-keyring_1.1-1_all.deb
     rm cuda-keyring_1.1-1_all.deb
-    apt-get update -qq 2>&1 | grep -v 'Policy will reject signature'
+    apt-get update -qq 2>&1 | grep -v 'Policy will reject signature' || true
 " >> "$LOG_FILE" 2>&1
 complete_progress "NVIDIA CUDA repository added"
 
@@ -528,10 +528,8 @@ complete_progress "NVIDIA CUDA repository added"
 echo "Installing NVIDIA utilities and CUDA toolkit (~3GB download)..." >> "$LOG_FILE"
 start_spinner "${CYAN}[Step 9/$TOTAL_STEPS]${NC} Installing NVIDIA utilities (~3GB download, 5-10 minutes)..."
 pct exec $CONTAINER_ID -- bash -c "
-    apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature' || {
-        # Fallback: If specific version not found, try generic nvidia-utils
-        apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature'
-    }
+    (apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 || \
+     apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1) | grep -v 'Policy will reject signature' || true
 " >> "$LOG_FILE" 2>&1
 stop_spinner
 complete_progress "NVIDIA utilities installed"

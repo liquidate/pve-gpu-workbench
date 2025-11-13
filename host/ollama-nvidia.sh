@@ -51,6 +51,40 @@ fi
 # Initialize log file
 echo "Starting Ollama NVIDIA LXC installation at $(date)" > "$LOG_FILE"
 
+# Error handler - called on any error
+error_handler() {
+    local exit_code=$?
+    local line_number=$1
+    
+    # Stop spinner if running
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    
+    # Show cursor
+    tput cnorm 2>/dev/null || true
+    
+    # Clear line and show error
+    echo -ne "\r\033[K"
+    echo ""
+    echo -e "${RED}✗ Failed: ollama-nvidia${NC}"
+    echo ""
+    echo -e "${YELLOW}An error occurred at line $line_number${NC}"
+    echo -e "${CYAN}Check the log for details:${NC}"
+    echo -e "  ${DIM}cat $LOG_FILE${NC}"
+    echo ""
+    echo -e "${DIM}Or view the last 50 lines:${NC}"
+    echo -e "  ${DIM}tail -50 $LOG_FILE${NC}"
+    echo ""
+    
+    exit $exit_code
+}
+
+# Set up error trap
+trap 'error_handler $LINENO' ERR
+
 # Progress indicator functions
 show_progress() {
     local step=$1

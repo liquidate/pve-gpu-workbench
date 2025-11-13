@@ -188,5 +188,29 @@ echo ""
 echo -e "${CYAN}📋 Full upgrade log saved to:${NC}"
 echo "  $LOG_FILE"
 echo ""
+
+# Check for existing LXC containers with GPU passthrough
+AMD_CONTAINERS=$(pct list | awk 'NR>1 {print $1}' | while read -r ctid; do
+    if pct config "$ctid" 2>/dev/null | grep -q "lxc.cgroup2.devices.allow.*226"; then
+        echo "$ctid"
+    fi
+done)
+
+if [ -n "$AMD_CONTAINERS" ]; then
+    echo -e "${YELLOW}⚠  Update existing LXC containers with GPU passthrough:${NC}"
+    echo ""
+    echo -e "${CYAN}Your containers with AMD GPUs need updated ROCm libraries:${NC}"
+    echo "$AMD_CONTAINERS" | while read -r ctid; do
+        CONTAINER_NAME=$(pct config "$ctid" | grep "^hostname:" | cut -d' ' -f2)
+        echo "  • Container $ctid ($CONTAINER_NAME)"
+    done
+    echo ""
+    echo -e "${CYAN}After reboot, update each container:${NC}"
+    echo -e "  ${GREEN}pct exec <CTID> -- bash -c 'apt update && apt install -y rocm-libs rocminfo'${NC}"
+    echo ""
+    echo -e "${DIM}Or recreate containers to auto-install matching versions${NC}"
+    echo ""
+fi
+
 echo "Run 'amd-verify' after reboot to verify the upgrade."
 

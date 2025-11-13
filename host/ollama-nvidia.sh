@@ -570,8 +570,9 @@ complete_progress "NVIDIA utilities installed"
 
 # Install Ollama
 echo "Installing Ollama..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 10/$TOTAL_STEPS]${NC} Installing Ollama..."
-pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
+start_spinner "${CYAN}[Step 10/$TOTAL_STEPS]${NC} Installing Ollama with CUDA support..."
+# Set CUDA paths so installer can detect GPU support
+pct exec $CONTAINER_ID -- bash -c "export LD_LIBRARY_PATH=/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu && export PATH=/usr/local/cuda-12.6/bin:\$PATH && curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
 stop_spinner
 
 complete_progress "Ollama installed"

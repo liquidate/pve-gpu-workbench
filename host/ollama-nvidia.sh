@@ -63,6 +63,38 @@ complete_progress() {
     echo -e "\r\033[K${GREEN}✓${NC} $1"
 }
 
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    # Hide cursor
+    tput civis
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null
+        wait "$SPINNER_PID" 2>/dev/null
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    # Show cursor
+    tput cnorm
+}
+
 echo ""
 echo -e "${CYAN}>>> Calculating recommended configuration...${NC}"
 echo ""
@@ -360,7 +392,7 @@ if [ ! -f "$TEMPLATE_PATH" ]; then
 fi
 
 # Create LXC container
-TOTAL_STEPS=9
+TOTAL_STEPS=12
 
 # Clear screen and show header for installation phase
 clear
@@ -460,58 +492,58 @@ fi
 
 # Install Ollama
 show_progress 6 $TOTAL_STEPS "Updating system packages"
+pct exec $CONTAINER_ID -- apt update -qq >> "$LOG_FILE" 2>&1
 
-{
-    pct exec $CONTAINER_ID -- apt update -qq
-    
-    # Count packages to upgrade
-    PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
-    
-    if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
-        echo -ne "\r\033[K${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages..."
-        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
-    fi
-} 
+# Count packages to upgrade
+PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
+
+if [ "$PACKAGE_COUNT" -gt 0 ]; then
+    echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
+    start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages (this may take 2-5 minutes)..."
+    pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
+    stop_spinner
+fi
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
-show_progress 7 $TOTAL_STEPS "Installing Ollama and NVIDIA utilities"
 
-{
-    echo "Installing prerequisites..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing prerequisites..."
-    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
-    
-    # Detect host NVIDIA driver version
-    HOST_DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d'.' -f1)
-    
-    # Install NVIDIA CUDA keyring and drivers (for nvidia-smi)
-    echo "Adding NVIDIA CUDA repository..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Adding NVIDIA CUDA repository..."
-    pct exec $CONTAINER_ID -- bash -c "
-        wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
-        dpkg -i cuda-keyring_1.1-1_all.deb
-        rm cuda-keyring_1.1-1_all.deb
-        apt-get update -qq 2>&1 | grep -v 'Policy will reject signature'
-    " >> "$LOG_FILE" 2>&1
-    
-    echo "Installing NVIDIA utilities and CUDA toolkit (~3GB download)..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing NVIDIA utilities (~3GB, please wait)..."
-    pct exec $CONTAINER_ID -- bash -c "
-        apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature' || {
-            # Fallback: If specific version not found, try generic nvidia-utils
-            apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature'
-        }
-    " >> "$LOG_FILE" 2>&1
-    
-    # Install Ollama
-    echo "Installing Ollama..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing Ollama..."
-    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
-}
+# Install prerequisites
+show_progress 7 $TOTAL_STEPS "Installing prerequisites"
+pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
+complete_progress "Prerequisites installed"
 
-complete_progress "Ollama and NVIDIA utilities installed"
-show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
+# Detect host NVIDIA driver version
+HOST_DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d'.' -f1)
+
+# Install NVIDIA CUDA repository
+show_progress 8 $TOTAL_STEPS "Adding NVIDIA CUDA repository"
+pct exec $CONTAINER_ID -- bash -c "
+    wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+    dpkg -i cuda-keyring_1.1-1_all.deb
+    rm cuda-keyring_1.1-1_all.deb
+    apt-get update -qq 2>&1 | grep -v 'Policy will reject signature'
+" >> "$LOG_FILE" 2>&1
+complete_progress "NVIDIA CUDA repository added"
+
+# Install NVIDIA utilities (~3GB download, takes time)
+echo "Installing NVIDIA utilities and CUDA toolkit (~3GB download)..." >> "$LOG_FILE"
+start_spinner "${CYAN}[Step 9/$TOTAL_STEPS]${NC} Installing NVIDIA utilities (~3GB download, 5-10 minutes)..."
+pct exec $CONTAINER_ID -- bash -c "
+    apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature' || {
+        # Fallback: If specific version not found, try generic nvidia-utils
+        apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature'
+    }
+" >> "$LOG_FILE" 2>&1
+stop_spinner
+complete_progress "NVIDIA utilities installed"
+
+# Install Ollama
+echo "Installing Ollama..." >> "$LOG_FILE"
+start_spinner "${CYAN}[Step 10/$TOTAL_STEPS]${NC} Installing Ollama..."
+pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
+stop_spinner
+
+complete_progress "Ollama installed"
+show_progress 11 $TOTAL_STEPS "Configuring Ollama service"
 
 {
     # Create systemd override to set OLLAMA_HOST
@@ -760,7 +792,7 @@ GPUVERIFYEOF
 chmod +x /usr/local/bin/gpu-verify' >> "$LOG_FILE" 2>&1
 
 # Run GPU verification
-show_progress 9 9 "Verifying GPU in container"
+show_progress 12 $TOTAL_STEPS "Verifying GPU in container"
 echo "" >> "$LOG_FILE" 2>&1
 echo "═══ Running GPU Verification ═══" >> "$LOG_FILE" 2>&1
 

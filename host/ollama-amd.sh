@@ -63,6 +63,38 @@ complete_progress() {
     echo -e "\r\033[K${GREEN}✓${NC} $1"
 }
 
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    # Hide cursor
+    tput civis
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null
+        wait "$SPINNER_PID" 2>/dev/null
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    # Show cursor
+    tput cnorm
+}
+
 echo ""
 echo -e "${CYAN}>>> Calculating recommended configuration...${NC}"
 echo ""
@@ -382,7 +414,7 @@ if [ ! -f "$TEMPLATE_PATH" ]; then
 fi
 
 # Create LXC container
-TOTAL_STEPS=9
+TOTAL_STEPS=12
 
 # Clear screen and show header for installation phase
 clear
@@ -467,22 +499,24 @@ fi
 
 # Install Ollama
 show_progress 6 $TOTAL_STEPS "Updating system packages"
+pct exec $CONTAINER_ID -- apt update -qq >> "$LOG_FILE" 2>&1
 
-{
-    pct exec $CONTAINER_ID -- apt update -qq
-    
-    # Count packages to upgrade
-    PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
-    
-    if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
-        echo -ne "\r\033[K${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages..."
-        pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
-    fi
-} 
+# Count packages to upgrade
+PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | grep -c "upgradable")
+
+if [ "$PACKAGE_COUNT" -gt 0 ]; then
+    echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
+    start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages (this may take 2-5 minutes)..."
+    pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
+    stop_spinner
+fi
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
-show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
+
+# Install prerequisites
+show_progress 7 $TOTAL_STEPS "Installing prerequisites"
+pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
+complete_progress "Prerequisites installed"
 
 # Detect ROCm version from host
 ROCM_VERSION=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/rocm.list 2>/dev/null | head -1)
@@ -490,35 +524,32 @@ if [ -z "$ROCM_VERSION" ]; then
     ROCM_VERSION="7.1"  # Fallback to latest
 fi
 
-{
-    echo "Installing prerequisites..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing prerequisites..."
-    pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 >> "$LOG_FILE" 2>&1
-    
-    # Install ROCm utilities (match host version: $ROCM_VERSION)
-    echo "Adding ROCm $ROCM_VERSION repository..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Adding ROCm $ROCM_VERSION repository..."
-    pct exec $CONTAINER_ID -- bash -c "
-        mkdir -p --mode=0755 /etc/apt/keyrings
-        wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
-        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/$ROCM_VERSION noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
-        apt update -qq
-    " >> "$LOG_FILE" 2>&1
-    
-    echo "Installing ROCm utilities (~2GB download)..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing ROCm utilities (~2GB, please wait)..."
-    pct exec $CONTAINER_ID -- bash -c "
-        apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
-    " >> "$LOG_FILE" 2>&1
-    
-    # Install Ollama
-    echo "Installing Ollama..." >> "$LOG_FILE"
-    echo -ne "\r\033[K${CYAN}[Step 7/$TOTAL_STEPS]${NC} Installing Ollama..."
-    pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
-}
+# Install ROCm repository
+show_progress 8 $TOTAL_STEPS "Adding ROCm $ROCM_VERSION repository"
+pct exec $CONTAINER_ID -- bash -c "
+    mkdir -p --mode=0755 /etc/apt/keyrings
+    wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
+    echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/$ROCM_VERSION noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
+    apt update -qq
+" >> "$LOG_FILE" 2>&1
+complete_progress "ROCm $ROCM_VERSION repository added"
 
-complete_progress "Ollama and ROCm utilities installed"
-show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
+# Install ROCm utilities (~2GB download, takes time)
+echo "Installing ROCm utilities (~2GB download)..." >> "$LOG_FILE"
+start_spinner "${CYAN}[Step 9/$TOTAL_STEPS]${NC} Installing ROCm utilities (~2GB download, 3-7 minutes)..."
+pct exec $CONTAINER_ID -- bash -c "
+    apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
+" >> "$LOG_FILE" 2>&1
+stop_spinner
+complete_progress "ROCm utilities installed"
+
+# Install Ollama
+echo "Installing Ollama..." >> "$LOG_FILE"
+start_spinner "${CYAN}[Step 10/$TOTAL_STEPS]${NC} Installing Ollama..."
+pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh" >> "$LOG_FILE" 2>&1
+stop_spinner
+complete_progress "Ollama installed"
+show_progress 11 $TOTAL_STEPS "Configuring Ollama service"
 {
     # Create systemd override to set OLLAMA_HOST
     pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
@@ -783,7 +814,7 @@ GPUVERIFYEOF
 chmod +x /usr/local/bin/gpu-verify' >> "$LOG_FILE" 2>&1
 
 # Run GPU verification
-show_progress 9 9 "Verifying GPU in container"
+show_progress 12 $TOTAL_STEPS "Verifying GPU in container"
 echo "" >> "$LOG_FILE" 2>&1
 echo "═══ Running GPU Verification ═══" >> "$LOG_FILE" 2>&1
 

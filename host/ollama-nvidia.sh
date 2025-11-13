@@ -23,6 +23,8 @@ echo "  • Install Ollama with full CUDA support"
 echo "  • Configure systemd service for auto-start"
 echo "  • Ready to run AI models locally"
 echo ""
+read -r -p "Press Enter to continue..."
+echo ""
 
 # Check for NVIDIA GPU
 echo -e "${GREEN}>>> Detecting NVIDIA GPU...${NC}"

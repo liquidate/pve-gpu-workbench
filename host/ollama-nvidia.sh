@@ -491,6 +491,14 @@ EOF
     
     # Add nvidiactl
     echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    
+    # Add DRI devices (needed for some GPU detection methods)
+    if [ -e /dev/dri/card1 ]; then
+        echo "lxc.mount.entry: /dev/dri/card1 dev/dri/card1 none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
+    if [ -e /dev/dri/renderD128 ]; then
+        echo "lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
 } >> "$LOG_FILE" 2>&1
 
 complete_progress "GPU passthrough configured"
@@ -588,7 +596,7 @@ show_progress 11 $TOTAL_STEPS "Configuring Ollama service"
     pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << '\''EOFMARKER'\''
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
-Environment="LD_LIBRARY_PATH=/usr/lib/ollama:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu"
+Environment="LD_LIBRARY_PATH=/usr/lib/ollama:/usr/lib/ollama/cuda_v12:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu"
 Environment="PATH=/usr/local/cuda-12.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EOFMARKER'
 

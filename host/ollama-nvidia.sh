@@ -476,13 +476,19 @@ show_progress 7 $TOTAL_STEPS "Installing Ollama and NVIDIA utilities"
 {
     pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
     
+    # Detect host NVIDIA driver version
+    HOST_DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d'.' -f1)
+    
     # Install NVIDIA CUDA keyring and drivers (for nvidia-smi)
     pct exec $CONTAINER_ID -- bash -c "
         wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
         dpkg -i cuda-keyring_1.1-1_all.deb
         rm cuda-keyring_1.1-1_all.deb
-        apt update -qq
-        apt install -y nvidia-utils-545 cuda-toolkit-12-6
+        apt-get update -qq 2>&1 | grep -v 'Policy will reject signature'
+        apt-get install -y nvidia-utils-${HOST_DRIVER_VERSION} cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature' || {
+            # Fallback: If specific version not found, try generic nvidia-utils
+            apt-get install -y nvidia-utils cuda-toolkit-12-6 2>&1 | grep -v 'Policy will reject signature'
+        }
     "
     
     # Install Ollama

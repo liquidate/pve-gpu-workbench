@@ -455,7 +455,8 @@ show_progress 7 $TOTAL_STEPS "Configuring Open WebUI service"
     # Create environment file with Ollama URL
     pct exec $CONTAINER_ID -- bash -c "cat > /root/.env << 'ENVEOF'
 OLLAMA_BASE_URL=http://${OLLAMA_IP}:11434
-ENABLE_OLLAMA_API=false
+ENABLE_OLLAMA_API=true
+ENABLE_OPENAI_API=false
 DATA_DIR=/root/.open-webui
 ENVEOF"
 

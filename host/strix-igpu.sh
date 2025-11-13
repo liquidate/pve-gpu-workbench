@@ -8,6 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../includes/colors.sh"
 
+# AMD-only check - Strix Halo is an AMD product
+if ! lspci | grep -qi "VGA.*AMD\|3D.*AMD"; then
+    echo -e "${YELLOW}This script is for AMD Strix Halo systems only.${NC}"
+    echo -e "${CYAN}Skipping (detected non-AMD system)${NC}"
+    exit 0
+fi
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Strix Halo iGPU VRAM Configuration${NC}"
 echo -e "${GREEN}========================================${NC}"

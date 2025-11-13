@@ -551,12 +551,12 @@ show_main_menu() {
         echo ""
     fi
     
-    echo -e "${GREEN}🚀 QUICK START${NC}"
+    echo -e "${GREEN}QUICK START${NC}"
     echo ""
     echo -e "  ${CYAN}setup${NC}          - Auto-configure GPU (drivers → verify → reboot)"
     echo ""
     
-    echo -e "${GREEN}🔧 HOST CONFIGURATION${NC}"
+    echo -e "${GREEN}HOST CONFIGURATION${NC}"
     echo ""
     
     # Add AMD setup scripts
@@ -592,7 +592,7 @@ show_main_menu() {
     done
     
     echo ""
-    echo -e "${GREEN}✓ DIAGNOSTICS & VERIFICATION${NC}"
+    echo -e "${GREEN}DIAGNOSTICS & VERIFICATION${NC}"
     echo ""
     
     # Add verify scripts
@@ -614,7 +614,7 @@ show_main_menu() {
     fi
     
     echo ""
-    echo -e "${GREEN}📦 DEPLOY CONTAINERS${NC}"
+    echo -e "${GREEN}DEPLOY CONTAINERS${NC}"
     echo ""
     
     # Add LXC scripts
@@ -644,7 +644,7 @@ show_main_menu() {
     fi
     
     echo ""
-    echo -e "${GREEN}⚙️  MAINTENANCE${NC}"
+    echo -e "${GREEN}MAINTENANCE${NC}"
     echo ""
     
     # Add upgrade and optional scripts

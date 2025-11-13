@@ -11,7 +11,6 @@ source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
 
 # Setup logging
 LOG_FILE="/tmp/nvidia-drivers-install-$(date +%Y%m%d-%H%M%S).log"
-exec 3>&1 4>&2  # Save stdout and stderr
 {
     echo "==================================="
     echo "NVIDIA Drivers Installation Log"
@@ -19,6 +18,48 @@ exec 3>&1 4>&2  # Save stdout and stderr
     echo "==================================="
     echo ""
 } > "$LOG_FILE"
+
+# Progress tracking functions
+show_progress() {
+    local step=$1
+    local total=$2
+    local message=$3
+    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
+}
+
+complete_progress() {
+    echo -e "\r\033[K${GREEN}✓${NC} $1"
+}
+
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    tput civis  # Hide cursor
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    tput cnorm  # Show cursor
+}
 
 # Check if NVIDIA GPU is present
 if ! detect_nvidia_gpus; then
@@ -46,11 +87,15 @@ echo "  File: $LOG_FILE"
 echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
 
+# Define total steps
+TOTAL_STEPS=6
+
 # Ensure required tools are available
 for tool in wget; do
     if ! command -v $tool &>/dev/null; then
-        echo ">>> Installing required tool: $tool"
+        start_spinner "Installing required tool: $tool"
         apt-get update -qq >> "$LOG_FILE" 2>&1 && apt-get install -y $tool >> "$LOG_FILE" 2>&1
+        stop_spinner
     fi
 done
 
@@ -68,35 +113,35 @@ if command -v nvidia-smi &>/dev/null && lsmod | grep -q "^nvidia "; then
 fi
 
 # Install prerequisites first
-echo ">>> Installing prerequisites..."
+show_progress 1 $TOTAL_STEPS "Installing prerequisites"
 apt-get update -qq >> "$LOG_FILE" 2>&1
 apt-get install -y proxmox-headers-"$(uname -r)" wget >> "$LOG_FILE" 2>&1
-echo "  ✓ Prerequisites installed"
+complete_progress "Prerequisites installed"
 
 # Enable Debian non-free repository (required for nvidia-driver packages)
-echo ">>> Enabling Debian non-free repository..."
+show_progress 2 $TOTAL_STEPS "Enabling non-free repository"
 if ! grep -q "non-free non-free-firmware" /etc/apt/sources.list.d/debian.sources; then
     sed -i 's/Components: main contrib non-free-firmware/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
-    echo ">>> Enabled non-free component for NVIDIA drivers"
 fi
+complete_progress "Non-free repository enabled"
 
 # Add NVIDIA CUDA repository
+show_progress 3 $TOTAL_STEPS "Adding NVIDIA CUDA repository"
 if [ ! -f /etc/apt/sources.list.d/cuda-debian12-x86_64.list ]; then
-    echo ">>> Adding NVIDIA CUDA repository..."
     wget -q https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb >> "$LOG_FILE" 2>&1
     dpkg -i cuda-keyring_1.1-1_all.deb >> "$LOG_FILE" 2>&1
     rm cuda-keyring_1.1-1_all.deb
-    echo "  ✓ Repository added"
 fi
+complete_progress "CUDA repository added"
 
 # Update package cache with new repositories
-echo ">>> Updating package cache..."
+show_progress 4 $TOTAL_STEPS "Updating package cache"
 apt-get update -qq >> "$LOG_FILE" 2>&1
-echo "  ✓ Cache updated"
+complete_progress "Package cache updated"
 
 # Fetch available driver versions from nvidia-driver package versions
 echo ""
-echo -e "${CYAN}>>> Fetching available NVIDIA driver versions...${NC}"
+show_progress 5 $TOTAL_STEPS "Fetching available driver versions"
 
 # Query apt-cache policy to get all available versions of nvidia-driver
 AVAILABLE_VERSIONS=$(apt-cache policy nvidia-driver 2>/dev/null | \
@@ -123,6 +168,8 @@ while read version; do
         BRANCH_ORDER+=($branch)
     fi
 done <<< "$AVAILABLE_VERSIONS"
+
+complete_progress "Driver versions fetched"
 
 # Show latest 6 driver branches
 echo ""
@@ -253,21 +300,22 @@ esac
 echo ""
 echo -e "${CYAN}>>> Installing NVIDIA driver ${DRIVER_VERSION} (branch ${DRIVER_BRANCH})${NC}"
 echo -e "${DIM}Kernel module: ${KERNEL_MODULE}${NC}"
-echo -e "${DIM}This may take a few minutes...${NC}"
 echo ""
 
 # Install full driver stack
 # Note: nvidia-driver-cuda provides nvidia-smi and CUDA integration for all versions
 echo "Installing driver packages..." >> "$LOG_FILE"
+show_progress 6 $TOTAL_STEPS "Installing NVIDIA driver ${DRIVER_VERSION} (this may take 3-5 minutes)"
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nvidia-driver=${DRIVER_VERSION} \
     ${KERNEL_MODULE}=${DRIVER_VERSION} \
     nvidia-driver-cuda=${DRIVER_VERSION} >> "$LOG_FILE" 2>&1
 
 if [ $? -eq 0 ]; then
-    echo "  ✓ Driver packages installed"
+    complete_progress "NVIDIA driver ${DRIVER_VERSION} installed"
 else
-    echo -e "${RED}  ✗ Driver installation failed${NC}"
+    stop_spinner
+    echo -e "${RED}✗ Driver installation failed${NC}"
     echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
     exit 1
 fi

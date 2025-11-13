@@ -17,6 +17,48 @@ LOG_FILE="/tmp/amd-upgrade-$(date +%Y%m%d-%H%M%S).log"
     echo ""
 } > "$LOG_FILE"
 
+# Progress tracking functions
+show_progress() {
+    local step=$1
+    local total=$2
+    local message=$3
+    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
+}
+
+complete_progress() {
+    echo -e "\r\033[K${GREEN}✓${NC} $1"
+}
+
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    tput civis  # Hide cursor
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    tput cnorm  # Show cursor
+}
+
 # Check if ROCm is installed
 if ! [ -f /etc/apt/sources.list.d/rocm.list ]; then
     echo -e "${RED}========================================${NC}"
@@ -38,6 +80,10 @@ echo -e "${CYAN}📋 Upgrade Log:${NC}"
 echo "  File: $LOG_FILE"
 echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
+
+# Define total steps
+TOTAL_STEPS=4
+
 echo -e "${CYAN}Current ROCm version: ${CURRENT_VERSION}${NC}"
 echo ""
 
@@ -49,7 +95,7 @@ if command -v rocminfo &>/dev/null; then
 fi
 
 # Fetch available ROCm versions from AMD repository
-echo -e "${CYAN}>>> Fetching available ROCm versions...${NC}"
+show_progress 1 $TOTAL_STEPS "Fetching available ROCm versions"
 AVAILABLE_VERSIONS=$(curl -s https://repo.radeon.com/rocm/apt/ | \
     grep -oP 'href="[0-9]+\.[0-9]+/"' | \
     grep -oP '[0-9]+\.[0-9]+' | \
@@ -64,6 +110,8 @@ if [ -z "$AVAILABLE_VERSIONS" ]; then
 7.1
 7.2"
 fi
+
+complete_progress "Available ROCm versions fetched"
 
 # Display available versions
 echo ""
@@ -103,24 +151,26 @@ for tool in curl wget gpg; do
 done
 
 # Update repository to new version
-echo ">>> Updating ROCm repository to version ${NEW_VERSION}"
-tee /etc/apt/sources.list.d/rocm.list << EOF
+show_progress 2 $TOTAL_STEPS "Updating ROCm repository to version ${NEW_VERSION}"
+tee /etc/apt/sources.list.d/rocm.list << EOF >> "$LOG_FILE"
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${NEW_VERSION} noble main
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/graphics/${NEW_VERSION}/ubuntu noble main
 EOF
 
-echo ">>> Updating package lists with new ROCm repository"
-apt update >> "$LOG_FILE" 2>&1
-echo "  ✓ Package cache updated"
+complete_progress "ROCm repository updated"
 
-echo ">>> Upgrading ROCm packages"
-echo -e "${DIM}This may take a few minutes...${NC}"
+show_progress 3 $TOTAL_STEPS "Updating package cache"
+apt update >> "$LOG_FILE" 2>&1
+complete_progress "Package cache updated"
+
+show_progress 4 $TOTAL_STEPS "Upgrading ROCm packages (this may take 3-5 minutes)"
 apt install -y --allow-downgrades rocm-smi rocminfo rocm-libs >> "$LOG_FILE" 2>&1
 
 if command -v rocm-smi &>/dev/null; then
-    echo "  ✓ ROCm packages upgraded"
+    complete_progress "ROCm packages upgraded to ${NEW_VERSION}"
 else
-    echo -e "${RED}  ✗ ROCm upgrade failed${NC}"
+    stop_spinner
+    echo -e "${RED}✗ ROCm upgrade failed${NC}"
     echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
     exit 1
 fi

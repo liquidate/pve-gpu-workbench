@@ -19,6 +19,48 @@ LOG_FILE="/tmp/amd-drivers-install-$(date +%Y%m%d-%H%M%S).log"
     echo ""
 } > "$LOG_FILE"
 
+# Progress tracking functions
+show_progress() {
+    local step=$1
+    local total=$2
+    local message=$3
+    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
+}
+
+complete_progress() {
+    echo -e "\r\033[K${GREEN}✓${NC} $1"
+}
+
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    tput civis  # Hide cursor
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    tput cnorm  # Show cursor
+}
+
 # Check if AMD GPU is present
 if ! detect_amd_gpus; then
     echo -e "${YELLOW}========================================${NC}"
@@ -45,6 +87,9 @@ echo "  File: $LOG_FILE"
 echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
 
+# Define total steps
+TOTAL_STEPS=5
+
 # Ensure required tools are available
 for tool in curl wget gpg; do
     if ! command -v $tool &>/dev/null; then
@@ -55,7 +100,7 @@ done
 
 # Fetch available ROCm versions from AMD repository
 echo ""
-echo -e "${CYAN}>>> Fetching available ROCm versions...${NC}"
+show_progress 1 $TOTAL_STEPS "Fetching available ROCm versions"
 AVAILABLE_VERSIONS=$(curl -s https://repo.radeon.com/rocm/apt/ | \
     grep -oP 'href="[0-9]+\.[0-9]+/"' | \
     grep -oP '[0-9]+\.[0-9]+' | \
@@ -73,6 +118,8 @@ fi
 
 # Get the latest version as default
 DEFAULT_VERSION=$(echo "$AVAILABLE_VERSIONS" | tail -1)
+
+complete_progress "ROCm versions fetched"
 
 # Display available versions
 echo ""
@@ -105,12 +152,12 @@ fi
 
 echo ""
 echo -e "${CYAN}>>> Installing ROCm ${ROCM_VERSION}${NC}"
-echo ">>> Adding AMD ROCm ${ROCM_VERSION} repository"
+echo ""
+show_progress 2 $TOTAL_STEPS "Adding AMD ROCm ${ROCM_VERSION} repository"
 mkdir --parents /etc/apt/keyrings
 chmod 0755 /etc/apt/keyrings
 wget https://repo.radeon.com/rocm/rocm.gpg.key -O - 2>> "$LOG_FILE" | \
 gpg --dearmor 2>> "$LOG_FILE" | tee /etc/apt/keyrings/rocm.gpg >> "$LOG_FILE"
-echo "  ✓ Repository GPG key added"
 
 tee /etc/apt/sources.list.d/rocm.list << EOF
 deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main
@@ -123,39 +170,38 @@ Pin: release o=repo.radeon.com
 Pin-Priority: 600
 EOF
 
-echo ">>> Updating package lists after adding ROCm repository"
-apt update >> "$LOG_FILE" 2>&1
-echo "  ✓ Package cache updated"
+complete_progress "ROCm repository added"
 
-echo ">>> Installing AMD ROCm drivers and tools"
-echo -e "${DIM}This may take a few minutes...${NC}"
+show_progress 3 $TOTAL_STEPS "Updating package cache"
+apt update >> "$LOG_FILE" 2>&1
+complete_progress "Package cache updated"
+
+show_progress 4 $TOTAL_STEPS "Installing AMD ROCm drivers and tools (this may take 3-5 minutes)"
 apt install -y rocm-smi rocminfo rocm-libs >> "$LOG_FILE" 2>&1
 apt install -y nvtop radeontop >> "$LOG_FILE" 2>&1
 
 if command -v rocm-smi &>/dev/null; then
-    echo "  ✓ ROCm drivers installed"
+    complete_progress "AMD ROCm drivers installed"
 else
-    echo -e "${RED}  ✗ ROCm installation failed${NC}"
+    stop_spinner
+    echo -e "${RED}✗ ROCm installation failed${NC}"
     echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
     exit 1
 fi
 
-echo ">>> Adding root user to render and video groups for GPU access"
+show_progress 5 $TOTAL_STEPS "Configuring user groups and environment"
 usermod -a -G render,video root
 
-echo ">>> Verifying root user group membership"
-groups root
-
-echo ">>> Setting up environment variables for ROCm"
 cat > /etc/profile.d/rocm.sh << 'EOF'
 export PATH="${PATH:+${PATH}:}/opt/rocm/bin/"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+${LD_LIBRARY_PATH}:}/opt/rocm/lib/"
 EOF
 
-echo ">>> Making /etc/profile.d/rocm.sh executable and sourcing it"
 chmod +x /etc/profile.d/rocm.sh
 # shellcheck disable=SC1091
 source /etc/profile.d/rocm.sh
+
+complete_progress "ROCm environment configured"
 
 echo ">>> AMD ROCm driver installation completed."
 echo -e "${YELLOW}⚠  Reboot recommended to ensure all drivers are loaded${NC}"

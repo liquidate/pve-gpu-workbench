@@ -19,6 +19,48 @@ LOG_FILE="/tmp/nvidia-upgrade-$(date +%Y%m%d-%H%M%S).log"
     echo ""
 } > "$LOG_FILE"
 
+# Progress tracking functions
+show_progress() {
+    local step=$1
+    local total=$2
+    local message=$3
+    echo -ne "\r\033[K${CYAN}[Step $step/$total]${NC} $message..."
+}
+
+complete_progress() {
+    echo -e "\r\033[K${GREEN}✓${NC} $1"
+}
+
+# Spinner for long-running commands
+SPINNER_PID=""
+start_spinner() {
+    local message="$1"
+    local spinner_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    
+    tput civis  # Hide cursor
+    
+    (
+        local i=0
+        while true; do
+            local char="${spinner_chars:$i:1}"
+            echo -ne "\r\033[K${CYAN}${char}${NC} ${message}"
+            i=$(( (i + 1) % ${#spinner_chars} ))
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "$SPINNER_PID" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[K"
+    tput cnorm  # Show cursor
+}
+
 # Check if NVIDIA GPU is present
 if ! detect_nvidia_gpus; then
     echo -e "${YELLOW}========================================${NC}"
@@ -34,6 +76,9 @@ echo -e "${CYAN}📋 Upgrade Log:${NC}"
 echo "  File: $LOG_FILE"
 echo -e "  Watch live: ${YELLOW}tail -f $LOG_FILE${NC}"
 echo ""
+
+# Define total steps
+TOTAL_STEPS=4
 
 # Check current driver version and installed packages
 CURRENT_DRIVER=""
@@ -83,9 +128,9 @@ fi
 
 # Update package cache
 echo ""
-echo -e "${CYAN}>>> Checking available driver versions...${NC}"
+show_progress 1 $TOTAL_STEPS "Checking available driver versions"
 apt-get update -qq >> "$LOG_FILE" 2>&1
-echo "  ✓ Package cache updated"
+complete_progress "Available driver versions fetched"
 
 # Fetch available driver versions from nvidia-driver package versions
 AVAILABLE_VERSIONS=$(apt-cache policy nvidia-driver 2>/dev/null | \
@@ -276,22 +321,23 @@ echo -e "${DIM}Kernel module: ${NEW_KERNEL_MODULE}${NC}"
 echo ""
 
 # Remove old driver and kernel module packages
-echo ">>> Removing old driver packages..."
+show_progress 3 $TOTAL_STEPS "Removing old driver packages"
 apt-get remove -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-open-dkms >> "$LOG_FILE" 2>&1 || true
-echo "  ✓ Old packages removed"
+complete_progress "Old driver packages removed"
 
 # Install new driver
-echo ">>> Installing NVIDIA driver ${NEW_VERSION}..."
-echo -e "${DIM}This may take a few minutes...${NC}"
+echo ""
+show_progress 4 $TOTAL_STEPS "Installing NVIDIA driver ${NEW_VERSION} (this may take 3-5 minutes)"
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nvidia-driver=${NEW_VERSION} \
     ${NEW_KERNEL_MODULE}=${NEW_VERSION} \
     nvidia-driver-cuda=${NEW_VERSION} >> "$LOG_FILE" 2>&1
 
 if [ $? -eq 0 ]; then
-    echo "  ✓ Driver packages installed"
+    complete_progress "NVIDIA driver ${NEW_VERSION} installed"
 else
-    echo -e "${RED}  ✗ Driver installation failed${NC}"
+    stop_spinner
+    echo -e "${RED}✗ Driver installation failed${NC}"
     echo -e "${YELLOW}  Check log: $LOG_FILE${NC}"
     exit 1
 fi

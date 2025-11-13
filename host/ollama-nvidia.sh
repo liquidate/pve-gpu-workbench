@@ -580,6 +580,12 @@ pct exec $CONTAINER_ID -- bash -c "
 stop_spinner
 complete_progress "NVIDIA utilities installed"
 
+# Install nvtop for GPU monitoring
+echo "Installing nvtop..." >> "$LOG_FILE"
+show_progress 9.5 $TOTAL_STEPS "Installing nvtop (GPU monitoring)"
+pct exec $CONTAINER_ID -- apt-get install -y nvtop >> "$LOG_FILE" 2>&1
+complete_progress "nvtop installed"
+
 # Install Ollama
 echo "Installing Ollama..." >> "$LOG_FILE"
 start_spinner "${CYAN}[Step 10/$TOTAL_STEPS]${NC} Installing Ollama with CUDA support..."

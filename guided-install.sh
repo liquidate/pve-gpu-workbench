@@ -369,8 +369,8 @@ display_numbered_script() {
     
     # Calculate padding for right-aligned status
     # Format: "  N  command-name    - Description...           [STATUS]"
-    # Total width: 67 chars, command padded to 15 chars for alignment
-    local total_width=67
+    # Total width: 78 chars for full descriptions, command padded to 15 chars
+    local total_width=78
     local cmd_width=15
     local number_str=$(printf "%2s" "$number")
     

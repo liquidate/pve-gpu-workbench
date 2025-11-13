@@ -4,6 +4,28 @@
 
 # All-in-one script: Creates GPU-enabled LXC + Installs Ollama natively
 # Optimized for NVIDIA GPUs with CUDA support
+#
+# CRITICAL LEARNINGS (2025-11-13):
+# ================================
+# 1. CORRECT cgroup device numbers are ESSENTIAL for GPU detection:
+#    - c 195:* rwm  = nvidia devices (nvidia0, nvidiactl, nvidia-modeset)  
+#    - c 511:* rwm  = nvidia-uvm (CRITICAL for CUDA/compute operations)
+#    - c 236:* rwm  = nvidia-caps (CRITICAL for GPU capabilities)
+#
+# 2. AppArmor workaround required for Proxmox 9:
+#    - lxc.apparmor.profile: unconfined
+#    - Bind mount /dev/null to apparmor/parameters/enabled
+#    - See: https://blog.ktz.me/apparmors-awkward-aftermath-atop-proxmox-9/
+#
+# 3. Device numbers can change after host reboot - verify with: ls -la /dev/nvidia*
+#
+# 4. Docker NOT required - native Ollama works perfectly with correct permissions
+#
+# 5. nvidia-uvm and nvidia-caps devices MUST be accessible in container
+#
+# References:
+# - https://www.reddit.com/r/Proxmox/comments/1ij523z/hosting_ollama_on_a_proxmox_lxc_container_with/
+# - https://blog.ktz.me/apparmors-awkward-aftermath-atop-proxmox-9/
 
 set -e
 
@@ -468,10 +490,18 @@ NVIDIA_DEVICES=$(ls /dev/nvidia* 2>/dev/null | grep -v nvidia-caps)
 {
     cat >> /etc/pve/lxc/${CONTAINER_ID}.conf << EOF
 
-# NVIDIA GPU passthrough
+# NVIDIA GPU passthrough with CORRECT device numbers
+# c 195 = nvidia devices (nvidia0, nvidiactl, nvidia-modeset)
+# c 511 = nvidia-uvm (CRITICAL for CUDA/compute)
+# c 236 = nvidia-caps (CRITICAL for GPU features)
 lxc.cgroup2.devices.allow: c 195:* rwm
-lxc.cgroup2.devices.allow: c 234:* rwm
-lxc.cgroup2.devices.allow: c 237:* rwm
+lxc.cgroup2.devices.allow: c 511:* rwm
+lxc.cgroup2.devices.allow: c 236:* rwm
+
+# AppArmor workaround for Proxmox 9 (prevents Docker issues)
+# See: https://blog.ktz.me/apparmors-awkward-aftermath-atop-proxmox-9/
+lxc.apparmor.profile: unconfined
+lxc.mount.entry: /dev/null sys/module/apparmor/parameters/enabled none bind 0 0
 EOF
 
     # Add all NVIDIA device entries
@@ -479,9 +509,14 @@ EOF
         echo "lxc.mount.entry: ${dev} $(echo ${dev} | cut -c2-) none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
     done
     
-    # Add nvidia-uvm if it exists
+    # Add nvidia-uvm if it exists (CRITICAL for CUDA compute)
     if [ -e /dev/nvidia-uvm ]; then
         echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
+    
+    # Add nvidia-uvm-tools if it exists
+    if [ -e /dev/nvidia-uvm-tools ]; then
+        echo "lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
     fi
     
     # Add nvidia-modeset if it exists
@@ -491,6 +526,11 @@ EOF
     
     # Add nvidiactl
     echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    
+    # Add nvidia-caps directory (CRITICAL for GPU features)
+    if [ -d /dev/nvidia-caps ]; then
+        echo "lxc.mount.entry: /dev/nvidia-caps dev/nvidia-caps none bind,optional,create=dir 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
     
     # Add DRI devices (needed for some GPU detection methods)
     if [ -e /dev/dri/card1 ]; then

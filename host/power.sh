@@ -116,8 +116,8 @@ case $CHOICE in
         echo ""
         echo -e "${GREEN}>>> Step 1/4: Installing powertop...${NC}"
         if ! command -v powertop >/dev/null 2>&1; then
-            apt update -qq
-            apt install -y powertop
+            apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
+            apt-get install -y powertop 2>&1 | grep -v "Policy will reject signature"
             echo -e "${GREEN}✓ Powertop installed${NC}"
         else
             echo -e "${GREEN}✓ Powertop already installed${NC}"

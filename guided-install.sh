@@ -247,7 +247,7 @@ get_script_description() {
     fi
 }
 
-# Function to display script with status
+# Function to display script with status (old style, kept for compatibility)
 display_script() {
     local script_command="$1"
     
@@ -315,6 +315,75 @@ display_script() {
     
     # Display with right-aligned status
     echo -e "  ${CYAN}${script_command}${NC} - ${description}${padding} ${status_display}"
+}
+
+# Function to display numbered menu item with status
+display_numbered_script() {
+    local number="$1"
+    local script_command="$2"
+    
+    # Get description and status
+    local description
+    local status
+    description=$(get_script_description "$script_command")
+    status=$(get_script_status "$script_command")
+    
+    # Format status with color
+    local status_display=""
+    local status_plain=""
+    if [ -n "$status" ]; then
+        status_plain="[$status]"
+        case "$status" in
+            "INSTALLED"|"CONFIGURED"|"ENABLED"|"PASSED")
+                status_display="${GREEN}[$status]${NC}"
+                ;;
+            "NOT INSTALLED"|"NOT CONFIGURED"|"DISABLED"|"NOT VERIFIED")
+                status_display="${YELLOW}[$status]${NC}"
+                ;;
+            *"GB VRAM")
+                status_display="${GREEN}[$status]${NC}"
+                ;;
+            *"AVAILABLE")
+                status_display="${YELLOW}[$status]${NC}"
+                ;;
+            "UP TO DATE")
+                status_display="${GREEN}[$status]${NC}"
+                ;;
+            v*)
+                status_display="${CYAN}[$status]${NC}"
+                ;;
+            *" UPDATES"|*"CONTAINERS")
+                status_display="${CYAN}[$status]${NC}"
+                ;;
+            "INFO"|"ACTION")
+                status_display="${DIM}[$status]${NC}"
+                ;;
+            *)
+                status_display="${CYAN}[$status]${NC}"
+                ;;
+        esac
+    fi
+    
+    # Calculate padding for right-aligned status
+    # Format: "  1  command-name  - Description...              [STATUS]"
+    # Total width: 63 chars (fits in narrower terminals with emoji sections)
+    local line_width=63
+    local number_str=$(printf "%2s" "$number")
+    local prefix_len=$((${#script_command} + 9))  # "  N  command - "
+    local status_len=${#status_plain}
+    local desc_max_len=$((line_width - prefix_len - status_len))
+    
+    # Truncate description if needed
+    if [ ${#description} -gt $desc_max_len ]; then
+        description="${description:0:$((desc_max_len - 3))}..."
+    fi
+    
+    # Calculate padding
+    local padding_len=$((desc_max_len - ${#description}))
+    local padding=$(printf "%${padding_len}s" "")
+    
+    # Display with number, command name (dim), description, and right-aligned status
+    echo -e "  ${CYAN}${number_str}${NC}  ${DIM}${script_command}${NC} - ${description}${padding} ${status_display}"
 }
 
 # Function to run a script
@@ -450,105 +519,167 @@ detect_gpus() {
     fi
 }
 
-# Main menu
+# Global array to store number-to-command mapping
+declare -a MENU_NUMBERS
+declare -A MENU_MAP
+
+# Main menu with numbered shortcuts
 show_main_menu() {
     clear
-    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  Proxmox Setup - Guided Installer    ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+    
+    # Reset menu mappings
+    MENU_NUMBERS=()
+    MENU_MAP=()
+    local menu_index=1
+    
+    # Build menu dynamically
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║           Proxmox GPU Management ${DIM}(pve-gpu)${NC}${GREEN}                    ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    # Show detected GPU info
+    # Show detected GPU info with emoji
     if [ "$HAS_AMD_GPU" = true ] || [ "$HAS_NVIDIA_GPU" = true ]; then
-        echo -e "${CYAN}Detected GPUs:${NC}"
-        [ "$HAS_AMD_GPU" = true ] && echo -e "  ${GREEN}✓${NC} AMD GPU detected"
-        [ "$HAS_NVIDIA_GPU" = true ] && echo -e "  ${GREEN}✓${NC} NVIDIA GPU detected"
+        if [ "$HAS_NVIDIA_GPU" = true ]; then
+            local gpu_model=$(lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | sed -E 's/.*NVIDIA (Corporation )?//' | sed -E 's/ \(rev.*\)//' | sed 's/\[//' | sed 's/\]//')
+            echo -e "${CYAN}GPU:${NC} $gpu_model"
+        fi
+        if [ "$HAS_AMD_GPU" = true ]; then
+            local gpu_model=$(lspci | grep -i "VGA.*AMD\|Display.*AMD" | head -1 | sed -E 's/.*\[AMD\/ATI\] //' | sed -E 's/ \(rev.*\)//')
+            echo -e "${CYAN}GPU:${NC} $gpu_model"
+        fi
         echo ""
     fi
     
-    echo -e "${GREEN}═══ GPU SETUP ═══${NC}"
+    echo -e "${GREEN}🚀 QUICK START${NC}"
+    echo ""
+    echo -e "  ${CYAN}setup${NC}          - Auto-configure GPU (drivers → verify → reboot)"
     echo ""
     
-    # Show AMD host scripts (in logical order for display)
+    echo -e "${GREEN}🔧 HOST CONFIGURATION${NC}"
+    echo ""
+    
+    # Add AMD setup scripts
     if [ "$HAS_AMD_GPU" = true ]; then
-        # Setup scripts
         for cmd in strix-igpu amd-drivers; do
-            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+            if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+                display_numbered_script "$menu_index" "$cmd"
+                MENU_MAP[$menu_index]="$cmd"
+                MENU_NUMBERS+=("$menu_index")
+                ((menu_index++))
+            fi
         done
     fi
     
-    # Show NVIDIA host scripts
+    # Add NVIDIA setup scripts
     if [ "$HAS_NVIDIA_GPU" = true ]; then
-        [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-drivers " ]] && display_script "nvidia-drivers"
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-drivers " ]]; then
+            display_numbered_script "$menu_index" "nvidia-drivers"
+            MENU_MAP[$menu_index]="nvidia-drivers"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
     fi
     
-    # Show universal host scripts (gpu-udev)
+    # Add universal setup scripts
     for cmd in gpu-udev; do
-        [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+            display_numbered_script "$menu_index" "$cmd"
+            MENU_MAP[$menu_index]="$cmd"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
     done
     
-    # Show verify scripts separately (not part of "setup")
     echo ""
-    echo -e "${GREEN}═══ VERIFICATION ═══${NC}"
+    echo -e "${GREEN}✓ DIAGNOSTICS & VERIFICATION${NC}"
     echo ""
+    
+    # Add verify scripts
     if [ "$HAS_AMD_GPU" = true ]; then
-        [[ " ${SCRIPT_COMMANDS[@]} " =~ " amd-verify " ]] && display_script "amd-verify"
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " amd-verify " ]]; then
+            display_numbered_script "$menu_index" "amd-verify"
+            MENU_MAP[$menu_index]="amd-verify"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
     fi
     if [ "$HAS_NVIDIA_GPU" = true ]; then
-        [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-verify " ]] && display_script "nvidia-verify"
-    fi
-    
-    # Show optional scripts
-    echo ""
-    echo -e "${GREEN}═══ OPTIONAL ═══${NC}"
-    echo ""
-    for cmd in power; do
-        [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
-    done
-    # AMD-specific optional scripts
-    if [ "$HAS_AMD_GPU" = true ]; then
-        for cmd in amd-upgrade; do
-            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
-        done
-    fi
-    # NVIDIA-specific optional scripts
-    if [ "$HAS_NVIDIA_GPU" = true ]; then
-        for cmd in nvidia-upgrade; do
-            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
-        done
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-verify " ]]; then
+            display_numbered_script "$menu_index" "nvidia-verify"
+            MENU_MAP[$menu_index]="nvidia-verify"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
     fi
     
     echo ""
-    echo -e "${GREEN}═══ LXC CONTAINERS ═══${NC}"
+    echo -e "${GREEN}📦 DEPLOY CONTAINERS${NC}"
     echo ""
     
-    # Show LXC scripts based on detected GPU
-    local lxc_scripts_shown=false
+    # Add LXC scripts
+    local lxc_shown=false
     if [ "$HAS_AMD_GPU" = true ]; then
         for cmd in $(get_lxc_scripts "amd"); do
-            display_script "$cmd"
-            lxc_scripts_shown=true
+            display_numbered_script "$menu_index" "$cmd"
+            MENU_MAP[$menu_index]="$cmd"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+            lxc_shown=true
         done
     fi
     
     if [ "$HAS_NVIDIA_GPU" = true ]; then
         for cmd in $(get_lxc_scripts "nvidia"); do
-            display_script "$cmd"
-            lxc_scripts_shown=true
+            display_numbered_script "$menu_index" "$cmd"
+            MENU_MAP[$menu_index]="$cmd"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+            lxc_shown=true
         done
     fi
     
-    if [ "$lxc_scripts_shown" = false ]; then
-        echo -e "  ${YELLOW}No GPU detected - LXC creation unavailable${NC}"
+    if [ "$lxc_shown" = false ]; then
+        echo -e "  ${DIM}No GPU detected - container deployment unavailable${NC}"
     fi
     
     echo ""
-    echo -e "${YELLOW}Commands:${NC}"
-    echo "  setup           - Run all GPU Setup scripts (reboot + verify after)"
-    echo "  <command>       - Run specific script (e.g., strix-igpu, ollama-amd)"
-    echo "  [u]pdate        - Update scripts from GitHub"
-    echo "  [i]nfo          - Show system information"
-    echo "  [q]uit          - Exit"
+    echo -e "${GREEN}⚙️  MAINTENANCE${NC}"
+    echo ""
+    
+    # Add upgrade and optional scripts
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " nvidia-upgrade " ]]; then
+            display_numbered_script "$menu_index" "nvidia-upgrade"
+            MENU_MAP[$menu_index]="nvidia-upgrade"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
+    fi
+    if [ "$HAS_AMD_GPU" = true ]; then
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " amd-upgrade " ]]; then
+            display_numbered_script "$menu_index" "amd-upgrade"
+            MENU_MAP[$menu_index]="amd-upgrade"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
+    fi
+    for cmd in power; do
+        if [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]]; then
+            display_numbered_script "$menu_index" "$cmd"
+            MENU_MAP[$menu_index]="$cmd"
+            MENU_NUMBERS+=("$menu_index")
+            ((menu_index++))
+        fi
+    done
+    
+    echo -e "  ${CYAN}u${NC}            - Update pve-gpu scripts from GitHub"
+    echo -e "  ${CYAN}i${NC}            - Show system information"
+    echo ""
+    
+    # Show compact command help
+    echo -e "${DIM}───────────────────────────────────────────────────────────────${NC}"
+    echo -e "${YELLOW}Enter:${NC} ${CYAN}[number]${NC} ${DIM}or${NC} ${CYAN}<name>${NC} ${DIM}or${NC} ${CYAN}setup${NC} ${DIM}or${NC} ${CYAN}[q]uit${NC}"
     echo ""
 }
 
@@ -775,9 +906,15 @@ while true; do
     show_main_menu
     
     # Use read -e for readline support (arrow keys, history)
-    read -e -r -p "Enter your choice [setup]: " choice
+    read -e -r -p "Choice [setup]: " choice
     choice=${choice:-setup}  # Default to "setup"
-    choice=${choice,,}  # Convert to lowercase
+    
+    # Check if input is a number and map to command
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ -n "${MENU_MAP[$choice]}" ]; then
+        choice="${MENU_MAP[$choice]}"
+    else
+        choice=${choice,,}  # Convert to lowercase for text commands
+    fi
     
     case "$choice" in
         "setup"|"all")  # Accept both "setup" and legacy "all"

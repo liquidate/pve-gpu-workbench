@@ -546,10 +546,10 @@ show_main_menu() {
     MENU_MAP=()
     local menu_index=1
     
-    # Build menu dynamically
-    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║           Proxmox GPU Management ${DIM}(pve-gpu)${NC}${GREEN}                    ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    # Build menu dynamically (78 char width to match menu items)
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                  Proxmox GPU Management ${DIM}(pve-gpu)${NC}${GREEN}                       ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
     # Show detected GPU info with emoji
@@ -682,9 +682,9 @@ show_main_menu() {
 # Function to show detailed system information
 show_system_info() {
     clear
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              System Information Dashboard                    ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                      System Information Dashboard                            ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
     # Script Version & System Info

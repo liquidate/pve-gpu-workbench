@@ -21,7 +21,7 @@ NC='\033[0m'
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  PVE GPU Workbench - Installer      ║${NC}"
+echo -e "${GREEN}║  PVE GPU Workbench - Installer       ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
 echo ""
 

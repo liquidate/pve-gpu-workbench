@@ -516,6 +516,37 @@ get_lxc_scripts() {
     done | sort
 }
 
+# Function to get unique LXC categories that have available scripts
+get_lxc_categories() {
+    local gpu_type="$1"
+    local categories=()
+    
+    for command in $(get_lxc_scripts "$gpu_type"); do
+        local category="${SCRIPT_CATEGORIES[$command]}"
+        # Add to array if not already present
+        if [[ ! " ${categories[@]} " =~ " ${category} " ]]; then
+            categories+=("$category")
+        fi
+    done
+    
+    # Sort and output
+    printf '%s\n' "${categories[@]}" | sort
+}
+
+# Function to get category display name
+get_category_display_name() {
+    local category="$1"
+    case "$category" in
+        lxc-ai) echo "AI & Machine Learning" ;;
+        lxc-media) echo "Media & Photos" ;;
+        lxc-dev) echo "Development Tools" ;;
+        lxc-productivity) echo "Productivity" ;;
+        lxc-monitoring) echo "Monitoring" ;;
+        lxc-network) echo "Network Services" ;;
+        *) echo "Other" ;;
+    esac
+}
+
 # Detect GPUs at startup
 detect_gpus() {
     # Load GPU detection functions
@@ -622,33 +653,42 @@ show_main_menu() {
         ((menu_index++))
     done
     
-    echo ""
-    echo -e "${GREEN}DEPLOY CONTAINERS${NC}"
-    echo ""
+    # Determine GPU type for container filtering
+    local lxc_gpu_type=""
+    [ "$HAS_AMD_GPU" = true ] && lxc_gpu_type="amd"
+    [ "$HAS_NVIDIA_GPU" = true ] && lxc_gpu_type="nvidia"
+    [ "$HAS_AMD_GPU" = true ] && [ "$HAS_NVIDIA_GPU" = true ] && lxc_gpu_type="all"
     
-    # Add LXC scripts
-    local lxc_shown=false
-    if [ "$HAS_AMD_GPU" = true ]; then
-        for cmd in $(get_lxc_scripts "amd"); do
-            display_numbered_script "$menu_index" "$cmd"
-            MENU_MAP[$menu_index]="$cmd"
-            MENU_NUMBERS+=("$menu_index")
-            ((menu_index++))
-            lxc_shown=true
-        done
-    fi
+    # Get unique LXC categories that have scripts
+    local lxc_categories_list
+    lxc_categories_list=$(get_lxc_categories "$lxc_gpu_type")
     
-    if [ "$HAS_NVIDIA_GPU" = true ]; then
-        for cmd in $(get_lxc_scripts "nvidia"); do
-            display_numbered_script "$menu_index" "$cmd"
-            MENU_MAP[$menu_index]="$cmd"
-            MENU_NUMBERS+=("$menu_index")
-            ((menu_index++))
-            lxc_shown=true
-        done
-    fi
-    
-    if [ "$lxc_shown" = false ]; then
+    if [ -n "$lxc_categories_list" ]; then
+        # Display each category as a subsection
+        while IFS= read -r lxc_category; do
+            [ -z "$lxc_category" ] && continue
+            
+            local display_name
+            display_name=$(get_category_display_name "$lxc_category")
+            
+            echo ""
+            echo -e "${GREEN}DEPLOY CONTAINERS${NC} ${DIM}($display_name)${NC}"
+            echo ""
+            
+            # Show scripts in this category
+            for cmd in $(get_lxc_scripts "$lxc_gpu_type"); do
+                if [ "${SCRIPT_CATEGORIES[$cmd]}" = "$lxc_category" ]; then
+                    display_numbered_script "$menu_index" "$cmd"
+                    MENU_MAP[$menu_index]="$cmd"
+                    MENU_NUMBERS+=("$menu_index")
+                    ((menu_index++))
+                fi
+            done
+        done <<< "$lxc_categories_list"
+    else
+        echo ""
+        echo -e "${GREEN}DEPLOY CONTAINERS${NC}"
+        echo ""
         echo -e "  ${DIM}No GPU detected - container deployment unavailable${NC}"
     fi
     

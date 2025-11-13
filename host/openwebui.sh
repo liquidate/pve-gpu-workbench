@@ -460,8 +460,6 @@ pct set $CONTAINER_ID --description "Open WebUI - AI Chat Interface
 📊 Status:
   systemctl status open-webui
   journalctl -u open-webui -f
-
-🔑 Root password: $ROOT_PASSWORD
 " >> "$LOG_FILE" 2>&1
 
 # Clear screen and show completion message
@@ -519,7 +517,4 @@ echo ""
 echo -e "${CYAN}📊 View logs:${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
 echo -e "   ${GREEN}journalctl -u open-webui -f${NC}"
-echo ""
-echo -e "${CYAN}🔒 Credentials:${NC}"
-echo -e "   Root Password: ${GREEN}$ROOT_PASSWORD${NC}"
 echo ""

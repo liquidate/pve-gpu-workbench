@@ -895,8 +895,6 @@ pct set $CONTAINER_ID --description "Ollama - Local AI Model Server (NVIDIA GPU)
 📊 Monitor GPU:
   ssh root@$IP_ADDRESS
   nvtop
-
-🔑 Root password: $ROOT_PASSWORD
 " >> "$LOG_FILE" 2>&1
 
 # Clear screen and show completion message

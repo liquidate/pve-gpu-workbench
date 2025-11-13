@@ -504,8 +504,3 @@ echo ""
 echo -e "${CYAN}🔒 Credentials:${NC}"
 echo -e "   Root Password: ${GREEN}$ROOT_PASSWORD${NC}"
 echo ""
-
-echo -e "${GREEN}✓ Completed: openwebui${NC}"
-echo ""
-read -r -p "Press Enter to continue..."
-

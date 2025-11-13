@@ -512,10 +512,11 @@ show_progress 7 $TOTAL_STEPS "Installing Ollama and NVIDIA utilities"
 
 complete_progress "Ollama and NVIDIA utilities installed"
 show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
+
 {
     # Create systemd override to set OLLAMA_HOST
     pct exec $CONTAINER_ID -- mkdir -p /etc/systemd/system/ollama.service.d
-    pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << "EOFMARKER"
+    pct exec $CONTAINER_ID -- bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf << '\''EOFMARKER'\''
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
 EOFMARKER'

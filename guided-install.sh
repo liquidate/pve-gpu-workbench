@@ -157,7 +157,18 @@ check_status_amd-upgrade() {
 }
 
 check_status_nvidia-upgrade() {
-    # Check if NVIDIA driver is installed
+    # Check if NVIDIA driver is installed - try nvidia-smi first, then dpkg
+    if command -v nvidia-smi &>/dev/null; then
+        local driver_version=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
+        if [ -n "$driver_version" ]; then
+            # Extract major version (e.g., 580.105.08 -> 580)
+            local major_version=$(echo "$driver_version" | cut -d'.' -f1)
+            echo "v${major_version}"
+            return
+        fi
+    fi
+    
+    # Fallback: check for old-style nvidia-driver-XXX packages
     local installed_version=$(dpkg -l 2>/dev/null | grep -oP 'nvidia-driver-\K[0-9]+' | head -1)
     
     if [ -n "$installed_version" ]; then

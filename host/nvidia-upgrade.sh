@@ -168,15 +168,15 @@ for branch in "${BRANCH_ORDER[@]}"; do
     
     if [ "$branch" = "$CURRENT_BRANCH" ]; then
         case "$branch" in
-            550) echo "  $branch ($version) - Long-lived branch ${GREEN}[INSTALLED]${NC}" ;;
-            545|555|560|565|570|575|580) echo "  $branch ($version) - Production branch ${GREEN}[INSTALLED]${NC}" ;;
-            *) echo "  $branch ($version) ${GREEN}[INSTALLED]${NC}" ;;
+            550) echo -e "  $branch ($version) - Long-lived branch ${GREEN}[INSTALLED]${NC}" ;;
+            545|555|560|565|570|575|580) echo -e "  $branch ($version) - Production branch ${GREEN}[INSTALLED]${NC}" ;;
+            *) echo -e "  $branch ($version) ${GREEN}[INSTALLED]${NC}" ;;
         esac
     else
         case "$branch" in
-            550) echo "  $branch ($version) - Long-lived branch" ;;
-            545|555|560|565|570|575|580) echo "  $branch ($version) - Production branch" ;;
-            *) echo "  $branch ($version)" ;;
+            550) echo -e "  $branch ($version) - Long-lived branch" ;;
+            545|555|560|565|570|575|580) echo -e "  $branch ($version) - Production branch" ;;
+            *) echo -e "  $branch ($version)" ;;
         esac
     fi
     ((BRANCH_COUNT++))

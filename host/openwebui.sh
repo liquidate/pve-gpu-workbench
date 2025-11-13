@@ -413,7 +413,7 @@ PACKAGE_COUNT=$(pct exec $CONTAINER_ID -- apt list --upgradable 2>/dev/null | gr
 
 if [ "$PACKAGE_COUNT" -gt 0 ]; then
     echo "Upgrading $PACKAGE_COUNT packages..." >> "$LOG_FILE"
-    start_spinner "${CYAN}[Step 4/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages (this may take 2-5 minutes)..."
+    start_spinner "${CYAN}[Step 4/$TOTAL_STEPS]${NC} Upgrading $PACKAGE_COUNT packages - this may take 2-5 minutes..."
     pct exec $CONTAINER_ID -- bash -c "DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'" >> "$LOG_FILE" 2>&1
     stop_spinner
 fi
@@ -422,14 +422,14 @@ complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 
 # Install prerequisites (ffmpeg has 950+ package dependencies, takes time)
 echo "Installing prerequisites..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 5/$TOTAL_STEPS]${NC} Installing prerequisites (ffmpeg + 950 deps, 2-4 minutes)..."
+start_spinner "${CYAN}[Step 5/$TOTAL_STEPS]${NC} Installing prerequisites - ffmpeg plus 950 deps, 2-4 minutes..."
 pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 ffmpeg python3-pip >> "$LOG_FILE" 2>&1
 stop_spinner
 complete_progress "Prerequisites installed"
 
 # Install uv and Open WebUI
 echo "Installing uv (Python package installer)..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI (~500MB download, 3-5 minutes)..."
+start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - about 500MB download, 3-5 minutes..."
 
 pct exec $CONTAINER_ID -- bash -c "
     # Install uv

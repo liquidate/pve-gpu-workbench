@@ -598,7 +598,7 @@ show_main_menu() {
     
     echo -e "${GREEN}QUICK START${NC}"
     echo ""
-    echo -e "  ${CYAN}setup${NC}          - Auto-configure GPU (drivers → verify → reboot)"
+    echo -e "  ${CYAN}setup${NC}          - Auto-configure GPU (drivers → udev → reboot)"
     echo ""
     
     echo -e "${GREEN}HOST CONFIGURATION${NC}"

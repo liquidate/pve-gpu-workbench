@@ -156,6 +156,17 @@ check_status_amd-upgrade() {
     fi
 }
 
+check_status_nvidia-upgrade() {
+    # Check if NVIDIA driver is installed
+    local installed_version=$(dpkg -l 2>/dev/null | grep -oP 'nvidia-driver-\K[0-9]+' | head -1)
+    
+    if [ -n "$installed_version" ]; then
+        echo "v${installed_version}"
+    else
+        echo "NOT INSTALLED"
+    fi
+}
+
 # Function to check status for a script
 get_script_status() {
     local script_command="$1"
@@ -233,8 +244,8 @@ display_script() {
     fi
     
     # Calculate padding for right-aligned status
-    # Total width: 68 chars (fits standard 80-char terminals with margin)
-    local line_width=68
+    # Total width: 75 chars (safe for Proxmox web UI / noVNC)
+    local line_width=75
     local prefix_len=$((${#script_command} + 5))  # "  command - "
     local status_len=${#status_plain}
     local desc_max_len=$((line_width - prefix_len - status_len - 1))  # -1 for space before status
@@ -313,7 +324,7 @@ get_host_scripts() {
     local amd_order=("strix-igpu" "amd-drivers")
     local nvidia_order=("nvidia-drivers")
     local universal_order=("gpu-udev")
-    local optional_order=("power" "amd-upgrade")
+    local optional_order=("power" "amd-upgrade" "nvidia-upgrade")
     
     if [ "$gpu_type" = "amd" ]; then
         for cmd in "${amd_order[@]}"; do
@@ -440,6 +451,12 @@ show_main_menu() {
     # AMD-specific optional scripts
     if [ "$HAS_AMD_GPU" = true ]; then
         for cmd in amd-upgrade; do
+            [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
+        done
+    fi
+    # NVIDIA-specific optional scripts
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        for cmd in nvidia-upgrade; do
             [[ " ${SCRIPT_COMMANDS[@]} " =~ " ${cmd} " ]] && display_script "$cmd"
         done
     fi
@@ -809,16 +826,31 @@ while true; do
                     echo -e "${CYAN}No scripts were run (all skipped or already configured)${NC}"
                     echo ""
                 elif [ "$reboot_needed" = true ]; then
-                    echo -e "${YELLOW}⚠  IMPORTANT NEXT STEPS:${NC}"
-                    echo -e "${CYAN}1.${NC} ${BOLD}Reboot your system${NC} (kernel parameters/drivers changed)"
-                    echo -e "${CYAN}2.${NC} After reboot, run verification:"
+                    echo -e "${YELLOW}⚠  REBOOT REQUIRED${NC}"
+                    echo -e "${CYAN}Kernel modules or parameters were changed and require a reboot.${NC}"
+                    echo ""
+                    echo -e "${YELLOW}After reboot, run verification:${NC}"
                     if [ "$HAS_AMD_GPU" = true ]; then
-                        echo -e "   ${BOLD}amd-verify${NC} - Comprehensive verification"
+                        echo -e "   ${BOLD}pve-gpu → amd-verify${NC}"
                     fi
                     if [ "$HAS_NVIDIA_GPU" = true ]; then
-                        echo -e "   ${BOLD}nvidia-verify${NC} - Comprehensive verification"
+                        echo -e "   ${BOLD}pve-gpu → nvidia-verify${NC}"
                     fi
                     echo ""
+                    read -r -p "Reboot now? [Y/n]: " reboot_choice < /dev/tty
+                    reboot_choice=${reboot_choice:-Y}
+                    
+                    if [[ "$reboot_choice" =~ ^[Yy]$ ]]; then
+                        echo ""
+                        echo -e "${GREEN}Rebooting in 5 seconds... (Ctrl+C to cancel)${NC}"
+                        sleep 5
+                        reboot
+                    else
+                        echo ""
+                        echo -e "${YELLOW}Remember to reboot manually before proceeding!${NC}"
+                        echo -e "${CYAN}Run: ${BOLD}reboot${NC}"
+                        echo ""
+                    fi
                 else
                     echo -e "${GREEN}✓ All changes applied successfully!${NC}"
                     echo -e "${CYAN}Note:${NC} You can run verification anytime:"

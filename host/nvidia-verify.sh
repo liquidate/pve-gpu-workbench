@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Verify NVIDIA driver installation
+# SCRIPT_DESC: Verify NVIDIA GPU setup and drivers
 # SCRIPT_DETECT: false
 
-# Verify NVIDIA driver installation
-# This script checks if NVIDIA drivers and tools are properly installed and accessible
+# Comprehensive NVIDIA GPU Verification
+# This script checks ALL aspects of NVIDIA GPU setup:
+# - Hardware detection
+# - Kernel module and driver
+# - CUDA toolkit and tools
+# - Device files
+# - udev rules
+# - Driver version
+# - Detects if reboot is needed
 
 # Get script directory and source utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,64 +20,212 @@ source "${SCRIPT_DIR}/../includes/colors.sh"
 source "${SCRIPT_DIR}/../includes/gpu-detect.sh"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}NVIDIA Driver Verification${NC}"
+echo -e "${GREEN}Comprehensive NVIDIA GPU Verification${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
+# Track overall status
+CHECKS_PASSED=0
+CHECKS_TOTAL=0
+REBOOT_NEEDED=false
+
+# Helper function to report check results
+check_result() {
+    local status=$1
+    local message=$2
+    ((CHECKS_TOTAL++))
+    if [ "$status" -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} $message"
+        ((CHECKS_PASSED++))
+    else
+        echo -e "${RED}✗${NC} $message"
+    fi
+}
+
+echo -e "${CYAN}═══ HARDWARE DETECTION ═══${NC}"
 # Check if NVIDIA GPU is present
-if ! detect_nvidia_gpus; then
-    echo -e "${RED}✗ No NVIDIA GPUs detected on this system${NC}"
-    echo ""
-    echo -e "${YELLOW}Available GPUs:${NC}"
-    lspci -nn | grep -i "VGA\|3D\|Display"
-    echo ""
-    exit 1
-fi
-echo -e "${GREEN}✓ NVIDIA GPU detected${NC}"
-
-# Check if driver is loaded
-if ! lsmod | grep -q nvidia; then
-    echo -e "${RED}✗ nvidia kernel module not loaded${NC}"
-    echo ""
-    echo -e "${YELLOW}Try:${NC}"
-    echo "  1. Run script 004 to install NVIDIA drivers"
-    echo "  2. Reboot the system"
-    echo ""
-    exit 1
-fi
-echo -e "${GREEN}✓ nvidia kernel module loaded${NC}"
-
-# Check for /dev/nvidia0
-if [ ! -e /dev/nvidia0 ]; then
-    echo -e "${RED}✗ /dev/nvidia0 not found${NC}"
-    echo -e "${YELLOW}NVIDIA device interface not available${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ /dev/nvidia0 present${NC}"
-
-# Check for nvidia-smi
-echo ""
-echo -e "${YELLOW}>>> Checking for NVIDIA tools...${NC}"
-if ! which nvidia-smi >/dev/null 2>&1; then
-    echo -e "${RED}✗ nvidia-smi not found${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ nvidia-smi installed${NC}"
-
-# Test nvidia-smi
-echo ""
-echo -e "${YELLOW}>>> Testing nvidia-smi...${NC}"
-if nvidia-smi >/dev/null 2>&1; then
-nvidia-smi
-    echo ""
-    echo -e "${GREEN}✓ nvidia-smi working${NC}"
+if detect_nvidia_gpus; then
+    check_result 0 "NVIDIA GPU detected"
+    lspci | grep -i "VGA\|3D\|Display" | grep -i NVIDIA | sed 's/^/  /'
 else
-    echo -e "${RED}✗ nvidia-smi failed${NC}"
-    nvidia-smi || true
+    check_result 1 "NVIDIA GPU not detected"
+    echo -e "${YELLOW}Available GPUs:${NC}"
+    lspci -nn | grep -i "VGA\|3D\|Display" | sed 's/^/  /'
+    echo ""
     exit 1
 fi
-
 echo ""
+
+echo -e "${CYAN}═══ KERNEL & DRIVER ═══${NC}"
+# Check if nvidia drivers are installed
+nvidia_installed=false
+if dpkg -l | grep -q "nvidia-kernel-dkms\|nvidia-driver"; then
+    nvidia_installed=true
+    check_result 0 "NVIDIA driver packages installed"
+else
+    check_result 1 "NVIDIA driver packages NOT installed"
+    echo -e "${YELLOW}  → Run 'nvidia-drivers' to install${NC}"
+fi
+
+# Check if nvidia kernel module is loaded
+if lsmod | grep -q "^nvidia "; then
+    check_result 0 "nvidia kernel module loaded"
+    # Get driver version from module
+    DRIVER_VERSION=$(modinfo nvidia 2>/dev/null | grep "^version:" | awk '{print $2}')
+    if [ -n "$DRIVER_VERSION" ]; then
+        echo -e "${DIM}  Driver version: $DRIVER_VERSION${NC}"
+    fi
+else
+    check_result 1 "nvidia kernel module NOT loaded"
+    if [ "$nvidia_installed" = true ]; then
+        echo -e "${YELLOW}  → Reboot required to load kernel module${NC}"
+        REBOOT_NEEDED=true
+    else
+        echo -e "${YELLOW}  → Install nvidia drivers first${NC}"
+    fi
+fi
+
+# Check for nvidia_uvm module (required for CUDA)
+if lsmod | grep -q "nvidia_uvm"; then
+    check_result 0 "nvidia_uvm module loaded (CUDA support)"
+else
+    check_result 1 "nvidia_uvm module not loaded"
+    if [ "$nvidia_installed" = true ] && lsmod | grep -q "^nvidia "; then
+        echo -e "${YELLOW}  → May need: modprobe nvidia_uvm${NC}"
+    fi
+fi
+echo ""
+
+echo -e "${CYAN}═══ DEVICE FILES ═══${NC}"
+# Check for /dev/nvidia0
+if [ -e /dev/nvidia0 ]; then
+    check_result 0 "/dev/nvidia0 present"
+    ls -la /dev/nvidia0 | sed 's/^/  /'
+else
+    check_result 1 "/dev/nvidia0 not found"
+    if [ "$nvidia_installed" = true ]; then
+        echo -e "${YELLOW}  → Reboot required${NC}"
+        REBOOT_NEEDED=true
+    fi
+fi
+
+# Check for /dev/nvidiactl
+if [ -e /dev/nvidiactl ]; then
+    check_result 0 "/dev/nvidiactl present"
+else
+    check_result 1 "/dev/nvidiactl not found"
+fi
+
+# Check for /dev/nvidia-uvm
+if [ -e /dev/nvidia-uvm ]; then
+    check_result 0 "/dev/nvidia-uvm present (CUDA Unified Memory)"
+else
+    check_result 1 "/dev/nvidia-uvm not found"
+fi
+
+# Count NVIDIA devices
+NVIDIA_DEV_COUNT=$(ls /dev/nvidia* 2>/dev/null | grep -v "nvidia-caps" | wc -l)
+if [ "$NVIDIA_DEV_COUNT" -gt 0 ]; then
+    check_result 0 "NVIDIA device files present (${NVIDIA_DEV_COUNT} devices)"
+else
+    check_result 1 "No NVIDIA device files found"
+fi
+echo ""
+
+echo -e "${CYAN}═══ NVIDIA TOOLS ═══${NC}"
+# Check for nvidia-smi
+if command -v nvidia-smi >/dev/null 2>&1; then
+    check_result 0 "nvidia-smi installed"
+else
+    check_result 1 "nvidia-smi missing"
+    echo -e "${YELLOW}  → Install nvidia-utils package${NC}"
+fi
+
+# Check for nvcc (CUDA compiler)
+if command -v nvcc >/dev/null 2>&1; then
+    check_result 0 "nvcc (CUDA compiler) installed"
+    CUDA_VERSION=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9.]+' || echo "unknown")
+    echo -e "${DIM}  CUDA version: $CUDA_VERSION${NC}"
+else
+    check_result 1 "nvcc not installed (CUDA toolkit not installed)"
+    echo -e "${DIM}  Note: CUDA toolkit is optional for LXC passthrough${NC}"
+fi
+
+# Check for nvtop (monitoring tool)
+if command -v nvtop >/dev/null 2>&1; then
+    check_result 0 "nvtop installed (GPU monitoring)"
+else
+    check_result 1 "nvtop not installed (optional)"
+fi
+echo ""
+
+echo -e "${CYAN}═══ UDEV RULES ═══${NC}"
+# Check for GPU udev rules
+if [ -f /etc/udev/rules.d/99-gpu-passthrough.rules ]; then
+    check_result 0 "GPU udev rules installed"
+    echo -e "${DIM}  $(wc -l < /etc/udev/rules.d/99-gpu-passthrough.rules) rules configured${NC}"
+    
+    # Check if NVIDIA rules are present
+    if grep -q "nvidia" /etc/udev/rules.d/99-gpu-passthrough.rules; then
+        check_result 0 "NVIDIA-specific udev rules present"
+    else
+        check_result 1 "NVIDIA-specific udev rules missing"
+    fi
+else
+    check_result 1 "GPU udev rules missing"
+    echo -e "${YELLOW}  → Run 'gpu-udev' to set up device permissions${NC}"
+fi
+echo ""
+
+echo -e "${CYAN}═══ FUNCTIONAL TESTS ═══${NC}"
+# Test nvidia-smi
+if command -v nvidia-smi >/dev/null 2>&1; then
+    if nvidia-smi &>/dev/null; then
+        check_result 0 "nvidia-smi functional"
+        echo ""
+        echo -e "${CYAN}GPU Information:${NC}"
+        nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader 2>/dev/null | sed 's/^/  GPU /' || echo "  Unable to query GPU"
+        echo ""
+        echo -e "${CYAN}Full nvidia-smi output:${NC}"
+        nvidia-smi 2>/dev/null | sed 's/^/  /'
+    else
+        check_result 1 "nvidia-smi not working"
+        echo -e "${YELLOW}  → Check driver installation and reboot if needed${NC}"
+    fi
+else
+    check_result 1 "nvidia-smi not available"
+fi
+echo ""
+
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}✓ NVIDIA Driver Verification Complete${NC}"
-echo -e "${GREEN}========================================${NC}"
+if [ "$CHECKS_PASSED" -eq "$CHECKS_TOTAL" ]; then
+    echo -e "${GREEN}✓ ALL CHECKS PASSED ($CHECKS_PASSED/$CHECKS_TOTAL)${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${CYAN}Your NVIDIA GPU is fully functional!${NC}"
+    echo ""
+    echo -e "${CYAN}Next steps:${NC}"
+    echo "  • Create GPU-enabled LXC: Run 'ollama-nvidia'"
+    echo "  • Monitor GPU: nvidia-smi -l 1"
+    echo ""
+    exit 0
+elif [ "$REBOOT_NEEDED" = true ]; then
+    echo -e "${YELLOW}⚠ REBOOT REQUIRED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${YELLOW}Changes have been made but require a reboot to take effect.${NC}"
+    echo -e "${CYAN}After rebooting, run this verification again.${NC}"
+    echo ""
+    exit 2
+else
+    echo -e "${YELLOW}⚠ SOME CHECKS FAILED ($CHECKS_PASSED/$CHECKS_TOTAL passed)${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${YELLOW}Troubleshooting:${NC}"
+    echo "  1. Install drivers: Run 'nvidia-drivers'"
+    echo "  2. Reboot the system"
+    echo "  3. Run this verification again"
+    echo "  4. Check kernel logs: dmesg | grep -i nvidia"
+    echo ""
+    exit 1
+fi

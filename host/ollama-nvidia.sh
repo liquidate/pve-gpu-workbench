@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Create Ollama LXC (AMD GPU)
+# SCRIPT_DESC: Create Ollama LXC (NVIDIA GPU)
 # SCRIPT_DETECT: 
 
 # All-in-one script: Creates GPU-enabled LXC + Installs Ollama natively
-# Optimized for AMD GPUs with ROCm support
+# Optimized for NVIDIA GPUs with CUDA support
 
 set -e
 
@@ -13,41 +13,41 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../includes/colors.sh"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Ollama LXC Creation${NC}"
+echo -e "${GREEN}Ollama LXC Creation (NVIDIA)${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}This script will:${NC}"
 echo "  • Create a new GPU-enabled LXC container"
-echo "  • Pass through AMD GPU for hardware acceleration"
-echo "  • Install Ollama with full GPU support"
+echo "  • Pass through NVIDIA GPU for hardware acceleration"
+echo "  • Install Ollama with full CUDA support"
 echo "  • Configure systemd service for auto-start"
 echo "  • Ready to run AI models locally"
 echo ""
 
-# Check for AMD GPU
-echo -e "${GREEN}>>> Detecting AMD GPU...${NC}"
-if ! lspci -nn | grep -i "VGA\|3D\|Display" | grep -qi amd; then
-    echo -e "${RED}ERROR: No AMD GPU detected on this system${NC}"
+# Check for NVIDIA GPU
+echo -e "${GREEN}>>> Detecting NVIDIA GPU...${NC}"
+if ! lspci -nn | grep -i "VGA\|3D\|Display" | grep -qi nvidia; then
+    echo -e "${RED}ERROR: No NVIDIA GPU detected on this system${NC}"
     echo ""
     echo -e "${YELLOW}Available GPUs:${NC}"
     lspci -nn | grep -i "VGA\|3D\|Display"
     echo ""
-    echo -e "${YELLOW}This script is for AMD GPUs only.${NC}"
-    echo -e "${YELLOW}For NVIDIA GPUs, use script 040 - create-nvidia-ollama-lxc.sh${NC}"
+    echo -e "${YELLOW}This script is for NVIDIA GPUs only.${NC}"
+    echo -e "${YELLOW}For AMD GPUs, use the ollama-amd script${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ AMD GPU detected${NC}"
+echo -e "${GREEN}✓ NVIDIA GPU detected${NC}"
 
 # Prepare for installation
-LOG_FILE="/tmp/ollama-lxc-install-$(date +%Y%m%d-%H%M%S).log"
+LOG_FILE="/tmp/ollama-nvidia-lxc-install-$(date +%Y%m%d-%H%M%S).log"
 
 # Clean up old log files (keep only the 5 most recent)
-if ls /tmp/ollama-lxc-install-*.log 1> /dev/null 2>&1; then
-    ls -t /tmp/ollama-lxc-install-*.log | tail -n +6 | xargs -r rm -f
+if ls /tmp/ollama-nvidia-lxc-install-*.log 1> /dev/null 2>&1; then
+    ls -t /tmp/ollama-nvidia-lxc-install-*.log | tail -n +6 | xargs -r rm -f
 fi
 
 # Initialize log file
-echo "Starting Ollama LXC installation at $(date)" > "$LOG_FILE"
+echo "Starting Ollama NVIDIA LXC installation at $(date)" > "$LOG_FILE"
 
 # Progress indicator functions
 show_progress() {
@@ -69,23 +69,12 @@ echo ""
 # STEP 1: Calculate ALL defaults (silently, no prompting)
 # ═══════════════════════════════════════════════════════════════
 
-# Detect GPU PCI address
-GPU_PCI_PATH=""
-GPU_MODEL=""
-for card in /dev/dri/by-path/pci-*-card; do
-    if [ -e "$card" ]; then
-        pci_addr=$(basename "$card" | sed 's/pci-\(.*\)-card/\1/')
-        gpu_info=$(lspci -s "${pci_addr#0000:}" 2>/dev/null | grep -i "VGA\|3D\|Display" || echo "")
-        if echo "$gpu_info" | grep -qi amd; then
-            GPU_PCI_PATH="$pci_addr"
-            GPU_MODEL=$(echo "$gpu_info" | sed -E 's/.*\[AMD\/ATI\] //' | sed -E 's/ \(rev.*\)//')
-            break
-        fi
-    fi
-done
+# Detect GPU information
+GPU_MODEL=$(lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | sed -E 's/.*NVIDIA (Corporation )?//' | sed -E 's/ \(rev.*\)//')
+GPU_PCI_BUS=$(lspci -D | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | awk '{print $1}')
 
-if [ -z "$GPU_PCI_PATH" ]; then
-    echo -e "${RED}ERROR: Could not detect GPU PCI path${NC}"
+if [ -z "$GPU_PCI_BUS" ]; then
+    echo -e "${RED}ERROR: Could not detect GPU PCI address${NC}"
     exit 1
 fi
 
@@ -173,18 +162,7 @@ done < <(printf '%s\n' "${STORAGE_LIST[@]}" | sort -t'|' -k3 -rn)
 
 # Resource allocation defaults
 TOTAL_RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
-GPU_VRAM_ALLOCATED=0
-if grep -q "amdgpu.gttsize=98304" /proc/cmdline 2>/dev/null; then
-    GPU_VRAM_ALLOCATED=96
-elif grep -q "amdgpu.gttsize" /proc/cmdline 2>/dev/null; then
-    GPU_VRAM_ALLOCATED=$(grep -oP 'amdgpu.gttsize=\K\d+' /proc/cmdline | head -n1)
-    GPU_VRAM_ALLOCATED=$((GPU_VRAM_ALLOCATED / 1024))
-fi
-
-AVAILABLE_RAM=$((TOTAL_RAM_GB - GPU_VRAM_ALLOCATED - 4))
-if [ $AVAILABLE_RAM -lt 0 ]; then
-    AVAILABLE_RAM=$((TOTAL_RAM_GB - 4))
-fi
+AVAILABLE_RAM=$((TOTAL_RAM_GB - 4))
 
 # Smart defaults
 DISK_SIZE=256
@@ -216,7 +194,7 @@ echo "  Hostname: $HOSTNAME"
 echo ""
 echo -e "${BOLD}GPU:${NC}"
 echo "  Model: $GPU_MODEL"
-echo "  PCI: $GPU_PCI_PATH"
+echo "  PCI: $GPU_PCI_BUS"
 echo ""
 echo -e "${BOLD}Network:${NC}"
 echo "  IP: $IP_ADDRESS/$BRIDGE_CIDR"
@@ -386,7 +364,7 @@ TOTAL_STEPS=9
 clear
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}Installing Ollama LXC Container${NC}"
+echo -e "${GREEN}Installing Ollama LXC Container (NVIDIA)${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo "  Container ID: $CONTAINER_ID | IP: $IP_ADDRESS"
 echo "  Resources: ${DISK_SIZE}GB disk, ${MEMORY}GB RAM, $CORES cores"
@@ -411,19 +389,36 @@ show_progress 1 $TOTAL_STEPS "Creating container"
 complete_progress "Container created"
 show_progress 2 $TOTAL_STEPS "Configuring GPU passthrough"
 
-# Configure GPU passthrough
+# Configure GPU passthrough for NVIDIA
+# Get all NVIDIA device numbers
+NVIDIA_DEVICES=$(ls /dev/nvidia* 2>/dev/null | grep -v nvidia-caps)
 
-# Add GPU device mappings to LXC config
 {
     cat >> /etc/pve/lxc/${CONTAINER_ID}.conf << EOF
 
-# AMD GPU passthrough
-lxc.cgroup2.devices.allow: c 226:* rwm
+# NVIDIA GPU passthrough
+lxc.cgroup2.devices.allow: c 195:* rwm
 lxc.cgroup2.devices.allow: c 234:* rwm
-lxc.mount.entry: /dev/dri/by-path/pci-${GPU_PCI_PATH}-card dev/dri/card0 none bind,optional,create=file 0 0
-lxc.mount.entry: /dev/dri/by-path/pci-${GPU_PCI_PATH}-render dev/dri/renderD128 none bind,optional,create=file 0 0
-lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file 0 0
+lxc.cgroup2.devices.allow: c 237:* rwm
 EOF
+
+    # Add all NVIDIA device entries
+    for dev in $NVIDIA_DEVICES; do
+        echo "lxc.mount.entry: ${dev} $(echo ${dev} | cut -c2-) none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    done
+    
+    # Add nvidia-uvm if it exists
+    if [ -e /dev/nvidia-uvm ]; then
+        echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
+    
+    # Add nvidia-modeset if it exists
+    if [ -e /dev/nvidia-modeset ]; then
+        echo "lxc.mount.entry: /dev/nvidia-modeset dev/nvidia-modeset none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
+    fi
+    
+    # Add nvidiactl
+    echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file 0 0" >> /etc/pve/lxc/${CONTAINER_ID}.conf
 } >> "$LOG_FILE" 2>&1
 
 complete_progress "GPU passthrough configured"
@@ -435,7 +430,7 @@ sleep 5
 
 complete_progress "Container started"
 
-# Set root password (already collected earlier)
+# Set root password
 show_progress 4 $TOTAL_STEPS "Setting password and SSH"
 
 {
@@ -451,15 +446,13 @@ complete_progress "Password and SSH configured"
 show_progress 5 $TOTAL_STEPS "Verifying GPU passthrough"
 
 # Verify GPU passthrough inside container
-if pct exec $CONTAINER_ID -- test -e /dev/dri/card0 && \
-   pct exec $CONTAINER_ID -- test -e /dev/dri/renderD128 && \
-   pct exec $CONTAINER_ID -- test -e /dev/kfd; then
+if pct exec $CONTAINER_ID -- test -e /dev/nvidia0 && \
+   pct exec $CONTAINER_ID -- test -e /dev/nvidiactl; then
     complete_progress "GPU passthrough verified"
 else
-    echo -e "${RED}ERROR: GPU devices not accessible inside container${NC}"
+    echo -e "${RED}ERROR: NVIDIA devices not accessible inside container${NC}"
     echo "Troubleshooting:"
-    echo "  pct exec $CONTAINER_ID -- ls -la /dev/dri/"
-    echo "  pct exec $CONTAINER_ID -- ls -la /dev/kfd"
+    echo "  pct exec $CONTAINER_ID -- ls -la /dev/nvidia*"
     exit 1
 fi
 
@@ -478,31 +471,25 @@ show_progress 6 $TOTAL_STEPS "Updating system packages"
 } >> "$LOG_FILE" 2>&1
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
-show_progress 7 $TOTAL_STEPS "Installing Ollama and ROCm utilities"
-
-# Detect ROCm version from host
-ROCM_VERSION=$(grep -oP 'rocm/apt/\K[0-9]+\.[0-9]+' /etc/apt/sources.list.d/rocm.list 2>/dev/null | head -1)
-if [ -z "$ROCM_VERSION" ]; then
-    ROCM_VERSION="7.1"  # Fallback to latest
-fi
+show_progress 7 $TOTAL_STEPS "Installing Ollama and NVIDIA utilities"
 
 {
     pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2
     
-    # Install ROCm utilities (match host version: $ROCM_VERSION)
+    # Install NVIDIA CUDA keyring and drivers (for nvidia-smi)
     pct exec $CONTAINER_ID -- bash -c "
-        mkdir -p --mode=0755 /etc/apt/keyrings
-        wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg > /dev/null
-        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/$ROCM_VERSION noble main' | tee /etc/apt/sources.list.d/rocm.list > /dev/null
+        wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+        dpkg -i cuda-keyring_1.1-1_all.deb
+        rm cuda-keyring_1.1-1_all.deb
         apt update -qq
-        apt install -y hsa-rocr rocm-core rocm-smi rocminfo radeontop
+        apt install -y nvidia-utils-545 cuda-toolkit-12-6
     "
     
     # Install Ollama
     pct exec $CONTAINER_ID -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
 } >> "$LOG_FILE" 2>&1
 
-complete_progress "Ollama and ROCm utilities installed"
+complete_progress "Ollama and NVIDIA utilities installed"
 show_progress 8 $TOTAL_STEPS "Configuring Ollama service"
 {
     # Create systemd override to set OLLAMA_HOST
@@ -605,8 +592,8 @@ chmod +x /usr/local/bin/update' >> "$LOG_FILE" 2>&1
 pct exec $CONTAINER_ID -- bash -c 'cat > /usr/local/bin/gpu-verify << '\''GPUVERIFYEOF'\''
 #!/usr/bin/env bash
 #
-# GPU Verification for LXC Container
-# Checks if AMD GPU is accessible and functional
+# GPU Verification for LXC Container (NVIDIA)
+# Checks if NVIDIA GPU is accessible and functional
 #
 
 GREEN='\''\033[0;32m'\''
@@ -617,7 +604,7 @@ NC='\''\033[0m'\''
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║         GPU Verification - LXC Container                     ║${NC}"
+echo -e "${GREEN}║       GPU Verification - LXC Container (NVIDIA)              ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -639,84 +626,67 @@ check_result() {
 
 echo -e "${CYAN}═══ GPU DEVICE FILES ═══${NC}"
 
-# Check for DRI devices
-if [ -e /dev/dri/card0 ]; then
-    check_result 0 "/dev/dri/card0 present"
+# Check for NVIDIA devices
+if [ -e /dev/nvidia0 ]; then
+    check_result 0 "/dev/nvidia0 present"
 else
-    check_result 1 "/dev/dri/card0 missing"
+    check_result 1 "/dev/nvidia0 missing"
 fi
 
-if [ -e /dev/dri/renderD128 ]; then
-    check_result 0 "/dev/dri/renderD128 present"
+if [ -e /dev/nvidiactl ]; then
+    check_result 0 "/dev/nvidiactl present"
 else
-    check_result 1 "/dev/dri/renderD128 missing"
+    check_result 1 "/dev/nvidiactl missing"
 fi
 
-# Check for KFD (ROCm compute interface)
-if [ -e /dev/kfd ]; then
-    check_result 0 "/dev/kfd present (ROCm compute interface)"
+if [ -e /dev/nvidia-uvm ]; then
+    check_result 0 "/dev/nvidia-uvm present (CUDA Unified Memory)"
 else
-    check_result 1 "/dev/kfd missing (ROCm compute unavailable)"
+    check_result 1 "/dev/nvidia-uvm missing"
 fi
 
 # Check permissions
-if [ -r /dev/dri/card0 ] && [ -w /dev/dri/card0 ]; then
-    check_result 0 "/dev/dri/card0 has read/write permissions"
+if [ -r /dev/nvidia0 ] && [ -w /dev/nvidia0 ]; then
+    check_result 0 "/dev/nvidia0 has read/write permissions"
 else
-    check_result 1 "/dev/dri/card0 lacks read/write permissions"
-fi
-
-if [ -r /dev/kfd ] && [ -w /dev/kfd ]; then
-    check_result 0 "/dev/kfd has read/write permissions"
-else
-    check_result 1 "/dev/kfd lacks read/write permissions"
+    check_result 1 "/dev/nvidia0 lacks read/write permissions"
 fi
 
 echo ""
-echo -e "${CYAN}═══ ROCM TOOLS ═══${NC}"
+echo -e "${CYAN}═══ NVIDIA TOOLS ═══${NC}"
 
-# Check for ROCm tools
-if command -v rocm-smi >/dev/null 2>&1; then
-    check_result 0 "rocm-smi installed"
+# Check for nvidia-smi
+if command -v nvidia-smi >/dev/null 2>&1; then
+    check_result 0 "nvidia-smi installed"
 else
-    check_result 1 "rocm-smi not installed"
-fi
-
-if command -v rocminfo >/dev/null 2>&1; then
-    check_result 0 "rocminfo installed"
-else
-    check_result 1 "rocminfo not installed"
+    check_result 1 "nvidia-smi not installed"
 fi
 
 echo ""
 echo -e "${CYAN}═══ GPU DETECTION ═══${NC}"
 
-# Test rocm-smi
-if command -v rocm-smi >/dev/null 2>&1; then
-    if rocm-smi --showproductname 2>&1 | grep -qi "GPU"; then
-        check_result 0 "rocm-smi detects GPU"
+# Test nvidia-smi
+if command -v nvidia-smi >/dev/null 2>&1; then
+    if nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | grep -v "Failed\|Error" | grep -q "."; then
+        check_result 0 "nvidia-smi detects GPU"
         echo -e "${CYAN}GPU Info:${NC}"
-        rocm-smi --showproductname 2>&1 | grep -i GPU | sed '\''s/^/  /'\''
+        nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | sed '\''s/^/  /'\''
     else
-        check_result 1 "rocm-smi does NOT detect GPU"
+        check_result 1 "nvidia-smi does NOT detect GPU"
     fi
 else
-    check_result 1 "rocm-smi not available"
+    check_result 1 "nvidia-smi not available"
 fi
 
-# Test rocminfo (informational only - may not work in LXC)
-if command -v rocminfo >/dev/null 2>&1; then
-    if rocminfo 2>/dev/null | grep -qi "gfx"; then
-        check_result 0 "rocminfo detects GPU agents"
-        echo -e "${CYAN}GPU Agent Details:${NC}"
-        # Show GPU-specific info (Marketing Name and gfx architecture)
-        rocminfo 2>/dev/null | grep -E "Marketing Name:|Name:.*gfx" | grep -v "CPU" | head -5 | sed '\''s/^/  /'\''
-    else
-        # Don'\''t count as failure - rocminfo often doesn'\''t work in LXC but GPU is still functional
-        echo -e "${CYAN}ℹ${NC} rocminfo GPU agent detection skipped (not required in LXC)"
-    fi
+echo ""
+echo -e "${CYAN}═══ CUDA STATUS ═══${NC}"
+
+# Check if CUDA is available
+if command -v nvcc >/dev/null 2>&1; then
+    CUDA_VERSION=$(nvcc --version | grep -oP '\''release \K[0-9.]+'\'' || echo "unknown")
+    check_result 0 "CUDA toolkit installed (version $CUDA_VERSION)"
 else
-    check_result 1 "rocminfo not available"
+    echo -e "${CYAN}ℹ${NC} CUDA toolkit not installed (not required for Ollama)"
 fi
 
 echo ""
@@ -730,7 +700,7 @@ if command -v ollama >/dev/null 2>&1; then
     if systemctl is-active --quiet ollama 2>/dev/null; then
         check_result 0 "Ollama service running"
         
-        # Try to get GPU info from Ollama (it shows GPU info in logs/ps output)
+        # Try to get GPU info from Ollama
         if pgrep -f ollama >/dev/null && ollama list >/dev/null 2>&1; then
             check_result 0 "Ollama responding to commands"
         else
@@ -757,10 +727,10 @@ else
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo -e "${YELLOW}Troubleshooting:${NC}"
-    echo "  1. Verify host GPU setup: Run '\''amd-verify'\'' on the host"
+    echo "  1. Verify host GPU setup: Run '\''nvidia-verify'\'' on the host"
     echo "  2. Check LXC config: cat /etc/pve/lxc/${HOSTNAME}.conf"
     echo "  3. Restart container: pct restart <VMID>"
-    echo "  4. Check host GPU: lspci | grep -i amd"
+    echo "  4. Check host GPU: lspci | grep -i nvidia"
     echo ""
     exit 1
 fi
@@ -784,7 +754,7 @@ echo "$GPU_VERIFY_OUTPUT" >> "$LOG_FILE" 2>&1
 
 # Parse results for summary
 GPU_CHECKS_PASSED=$(echo "$GPU_VERIFY_OUTPUT" | grep -oP '\d+/\d+ passed' | head -1)
-GPU_MODEL=$(echo "$GPU_VERIFY_OUTPUT" | grep -i "Card series\|Card model" | head -1 | sed 's/.*: *//' | xargs)
+GPU_MODEL_INFO=$(echo "$GPU_VERIFY_OUTPUT" | grep -A1 "GPU Info:" | tail -1 | xargs)
 GPU_STATUS=""
 
 if [ $GPU_VERIFY_EXIT -eq 0 ]; then
@@ -797,7 +767,7 @@ fi
 
 # Store for display in completion message
 GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
-[ -n "$GPU_MODEL" ] && GPU_VERIFY_DETAILS="$GPU_MODEL" || GPU_VERIFY_DETAILS="AMD GPU"
+[ -n "$GPU_MODEL_INFO" ] && GPU_VERIFY_DETAILS="$GPU_MODEL_INFO" || GPU_VERIFY_DETAILS="$GPU_MODEL"
 
 # Pause to let user read the final step
 sleep 3
@@ -823,7 +793,7 @@ if [ $GPU_VERIFY_EXIT -eq 0 ]; then
     echo -e "${CYAN}🎮 GPU Status:${NC} ${GREEN}$GPU_VERIFY_SUMMARY${NC}"
     echo -e "   ${GREEN}$GPU_VERIFY_DETAILS${NC}"
     echo -e "   ${GREEN}✓${NC} Device files accessible"
-    echo -e "   ${GREEN}✓${NC} ROCm tools functional"
+    echo -e "   ${GREEN}✓${NC} NVIDIA tools functional"
     echo -e "   ${GREEN}✓${NC} Ollama service running"
 else
     echo -e "${CYAN}🎮 GPU Status:${NC} ${YELLOW}$GPU_VERIFY_SUMMARY${NC}"
@@ -847,7 +817,7 @@ echo -e "   ${GREEN}ollama run llama3.2:3b \"Why is the sky blue? One sentence.\
 echo ""
 echo -e "${CYAN}3. Monitor GPU usage (in a new terminal):${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
-echo -e "   ${GREEN}watch -n 0.5 rocm-smi --showuse --showmemuse${NC}"
+echo -e "   ${GREEN}watch -n 0.5 nvidia-smi${NC}"
 echo ""
 echo -e "   ${YELLOW}→ You should see GPU usage spike when running models${NC}"
 echo ""
@@ -869,8 +839,8 @@ echo -e "${CYAN}🔍 Verify GPU (troubleshoot GPU issues):${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
 echo -e "   ${GREEN}gpu-verify${NC}"
 echo ""
-echo -e "${CYAN}📊 Alternative GPU Monitor:${NC}"
+echo -e "${CYAN}📊 View GPU Status:${NC}"
 echo -e "   ${GREEN}ssh root@$IP_ADDRESS${NC}"
-echo -e "   ${GREEN}radeontop${NC}  ${YELLOW}(interactive, press 'q' to quit)${NC}"
+echo -e "   ${GREEN}nvidia-smi${NC}"
 echo ""
 

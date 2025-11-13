@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Install NVIDIA CUDA drivers and modules
-# SCRIPT_DETECT: command -v nvidia-smi &>/dev/null
+# SCRIPT_DESC: Upgrade NVIDIA driver version
+# SCRIPT_DETECT: 
 
 # Get script directory and source utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,81 +15,71 @@ if ! detect_nvidia_gpus; then
     echo -e "${YELLOW}No NVIDIA GPUs detected on this system${NC}"
     echo -e "${YELLOW}========================================${NC}"
     echo ""
-    echo -e "${YELLOW}This script installs NVIDIA GPU drivers, but no NVIDIA GPUs were found.${NC}"
-    echo ""
-    echo -e "${YELLOW}Available GPUs:${NC}"
-    lspci -nn | grep -i "VGA\|3D\|Display"
-    echo ""
-    read -r -p "Continue anyway? [y/N]: " CONTINUE
-    CONTINUE=${CONTINUE:-N}
-    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-        echo "Skipped."
-        exit 0
-    fi
-fi
-
-echo -e "${GREEN}>>> Installing NVIDIA drivers${NC}"
-
-# Ensure required tools are available
-for tool in wget; do
-    if ! command -v $tool &>/dev/null; then
-        echo ">>> Installing required tool: $tool"
-        apt-get update -qq && apt-get install -y $tool >/dev/null 2>&1
-    fi
-done
-
-echo ""
-echo -e "${CYAN}>>> Installing NVIDIA drivers and CUDA support${NC}"
-echo ""
-
-# Check if drivers are already installed
-if command -v nvidia-smi &>/dev/null && lsmod | grep -q "^nvidia "; then
-    CURRENT_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
-    echo -e "${GREEN}✓ NVIDIA drivers already installed and loaded${NC}"
-    echo -e "${DIM}Driver version: ${CURRENT_VERSION}${NC}"
-    echo ""
     exit 0
 fi
 
-# Install prerequisites first
-echo ">>> Installing prerequisites..."
-apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
-apt-get install -y proxmox-headers-"$(uname -r)" wget 2>&1 | grep -v "Policy will reject signature"
+echo -e "${GREEN}>>> NVIDIA Driver Upgrade${NC}"
+echo ""
 
-# Enable Debian non-free repository (required for nvidia-driver packages)
-echo ">>> Enabling Debian non-free repository..."
-if ! grep -q "non-free non-free-firmware" /etc/apt/sources.list.d/debian.sources; then
-    sed -i 's/Components: main contrib non-free-firmware/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
-    echo ">>> Enabled non-free component for NVIDIA drivers"
+# Check current driver version and installed packages
+CURRENT_DRIVER=""
+if command -v nvidia-smi &>/dev/null; then
+    CURRENT_DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
 fi
 
-# Add NVIDIA CUDA repository
+# Detect currently installed kernel module type
+CURRENT_KERNEL_MODULE=""
+if dpkg -l | grep -q "^ii.*nvidia-kernel-open-dkms"; then
+    CURRENT_KERNEL_MODULE="nvidia-kernel-open-dkms"
+elif dpkg -l | grep -q "^ii.*nvidia-kernel-dkms"; then
+    CURRENT_KERNEL_MODULE="nvidia-kernel-dkms"
+fi
+
+if [ -n "$CURRENT_DRIVER" ]; then
+    echo -e "${CYAN}Current driver version:${NC} $CURRENT_DRIVER"
+fi
+
+if [ -n "$CURRENT_KERNEL_MODULE" ]; then
+    MODULE_TYPE=$(echo "$CURRENT_KERNEL_MODULE" | grep -q "open" && echo "Open Source" || echo "Proprietary")
+    echo -e "${CYAN}Kernel module:${NC} $MODULE_TYPE ($CURRENT_KERNEL_MODULE)"
+fi
+
+if [ -z "$CURRENT_DRIVER" ] || [ -z "$CURRENT_KERNEL_MODULE" ]; then
+    echo -e "${RED}No NVIDIA drivers currently installed${NC}"
+    echo ""
+    echo -e "${YELLOW}Run 'nvidia-drivers' to perform initial installation${NC}"
+    exit 1
+fi
+
+# Ensure Debian non-free repository is enabled
+if ! grep -q "non-free non-free-firmware" /etc/apt/sources.list.d/debian.sources 2>/dev/null; then
+    echo ""
+    echo -e "${YELLOW}Enabling Debian non-free repository...${NC}"
+    sed -i 's/Components: main contrib non-free-firmware/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+fi
+
+# Ensure NVIDIA repository is configured
 if [ ! -f /etc/apt/sources.list.d/cuda-debian12-x86_64.list ]; then
-    echo ">>> Adding NVIDIA CUDA repository..."
+    echo ""
+    echo -e "${YELLOW}NVIDIA repository not configured. Adding it now...${NC}"
     wget -q https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
     dpkg -i cuda-keyring_1.1-1_all.deb
     rm cuda-keyring_1.1-1_all.deb
 fi
 
-# Update package cache with new repositories
+# Update package cache
+echo ""
+echo -e "${CYAN}>>> Checking available driver versions...${NC}"
 apt-get update -qq 2>&1 | grep -v "Policy will reject signature"
 
 # Fetch available driver versions from nvidia-driver package versions
-echo ""
-echo -e "${CYAN}>>> Fetching available NVIDIA driver versions...${NC}"
-
-# Query apt-cache policy to get all available versions of nvidia-driver
 AVAILABLE_VERSIONS=$(apt-cache policy nvidia-driver 2>/dev/null | \
     grep -oP '^\s+\K[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' | \
     sort -V -r | \
     head -20)
 
 if [ -z "$AVAILABLE_VERSIONS" ]; then
-    echo -e "${RED}ERROR: Could not fetch driver versions from repository${NC}"
-    echo -e "${YELLOW}This usually means:${NC}"
-    echo "  1. Network connectivity issue"
-    echo "  2. Repository not properly configured"
-    echo ""
+    echo -e "${RED}Could not fetch available driver versions${NC}"
     exit 1
 fi
 
@@ -104,63 +94,83 @@ while read version; do
     fi
 done <<< "$AVAILABLE_VERSIONS"
 
-# Show latest 6 driver branches
+# Get current branch from current driver version
+CURRENT_BRANCH=$(echo "$CURRENT_DRIVER" | cut -d'.' -f1)
+
+# Display available versions
 echo ""
 echo -e "${YELLOW}Available NVIDIA driver branches (latest versions):${NC}"
 BRANCH_COUNT=0
 for branch in "${BRANCH_ORDER[@]}"; do
-    [ $BRANCH_COUNT -ge 6 ] && break
+    [ $BRANCH_COUNT -ge 10 ] && break
     version="${DRIVER_BRANCHES[$branch]}"
-    case "$branch" in
-        550) echo "  $branch ($version) - Long-lived branch (most stable)" ;;
-        545|555|560|565|570|575|580) echo "  $branch ($version) - Production branch" ;;
-        *) echo "  $branch ($version)" ;;
-    esac
+    
+    if [ "$branch" = "$CURRENT_BRANCH" ]; then
+        case "$branch" in
+            550) echo "  $branch ($version) - Long-lived branch ${GREEN}[INSTALLED]${NC}" ;;
+            545|555|560|565|570|575|580) echo "  $branch ($version) - Production branch ${GREEN}[INSTALLED]${NC}" ;;
+            *) echo "  $branch ($version) ${GREEN}[INSTALLED]${NC}" ;;
+        esac
+    else
+        case "$branch" in
+            550) echo "  $branch ($version) - Long-lived branch" ;;
+            545|555|560|565|570|575|580) echo "  $branch ($version) - Production branch" ;;
+            *) echo "  $branch ($version)" ;;
+        esac
+    fi
     ((BRANCH_COUNT++))
 done
-
-# Default to the newest branch
-DEFAULT_BRANCH="${BRANCH_ORDER[0]}"
 
 echo ""
 echo -e "${DIM}Branches: 550 = stable long-lived, higher numbers = newer${NC}"
 echo -e "${DIM}Full version will be installed (e.g., 550 → 550.163.01)${NC}"
 echo ""
-read -r -p "Select driver branch to install [${DEFAULT_BRANCH}]: " DRIVER_BRANCH
-DRIVER_BRANCH=${DRIVER_BRANCH:-${DEFAULT_BRANCH}}
+
+# Get user selection
+read -r -p "Select driver branch to install (or press Enter to cancel): " NEW_BRANCH
+
+if [ -z "$NEW_BRANCH" ]; then
+    echo "Cancelled."
+    exit 0
+fi
 
 # Validate branch selection
-if [ -z "${DRIVER_BRANCHES[$DRIVER_BRANCH]}" ]; then
-    echo -e "${RED}ERROR: Driver branch ${DRIVER_BRANCH} not found${NC}"
+if [ -z "${DRIVER_BRANCHES[$NEW_BRANCH]}" ]; then
+    echo -e "${RED}ERROR: Driver branch ${NEW_BRANCH} not found${NC}"
     echo -e "${YELLOW}Available branches: ${BRANCH_ORDER[*]}${NC}"
     exit 1
 fi
 
 # Get the specific version for this branch
-DRIVER_VERSION="${DRIVER_BRANCHES[$DRIVER_BRANCH]}"
+NEW_VERSION="${DRIVER_BRANCHES[$NEW_BRANCH]}"
 
-# Detect GPU architecture and Secure Boot status
-GPU_ARCH=$(lspci -nn | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1 | grep -oP '\[10de:[0-9a-f]+\]')
+# Check if it's the same version
+if [ "$NEW_BRANCH" = "$CURRENT_BRANCH" ]; then
+    echo -e "${GREEN}✓ Driver version ${NEW_BRANCH} is already installed${NC}"
+    echo ""
+    echo -e "${YELLOW}Would you like to change the kernel module type?${NC}"
+    read -r -p "Change kernel module? [y/N]: " CHANGE_MODULE
+    CHANGE_MODULE=${CHANGE_MODULE:-N}
+    if [[ ! "$CHANGE_MODULE" =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+fi
+
+# Detect GPU and Secure Boot for kernel module recommendation
+GPU_NAME=$(lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1)
 SECURE_BOOT_ENABLED=false
 if mokutil --sb-state 2>/dev/null | grep -q "SecureBoot enabled"; then
     SECURE_BOOT_ENABLED=true
 fi
 
-# Determine which kernel module to recommend
-# Open kernel module is recommended for Turing (20xx) and newer
-# Reference: https://github.com/NVIDIA/open-gpu-kernel-modules
-echo ""
-echo -e "${CYAN}>>> Selecting kernel module...${NC}"
-
-# Detect GPU generation for smart defaults
-GPU_NAME=$(lspci | grep -i "VGA.*NVIDIA\|3D.*NVIDIA" | head -1)
 RECOMMEND_OPEN=false
-
-# Check for newer GPU architectures (Turing+: RTX 20xx, 30xx, 40xx, 50xx, A-series)
 if echo "$GPU_NAME" | grep -Ei "RTX (20|30|40|50|A)[0-9]|A[0-9]{3,4}|L[0-9]{1,2}"; then
     RECOMMEND_OPEN=true
 fi
 
+# Kernel module selection
+echo ""
+echo -e "${CYAN}>>> Selecting kernel module...${NC}"
 echo ""
 echo -e "${YELLOW}Kernel Module Options:${NC}"
 echo ""
@@ -184,10 +194,13 @@ if [ "$SECURE_BOOT_ENABLED" = true ]; then
     echo ""
 fi
 
+# Show current module
+MODULE_TYPE=$(echo "$CURRENT_KERNEL_MODULE" | grep -q "open" && echo "2 (Open)" || echo "1 (Proprietary)")
+echo -e "${CYAN}Currently installed: $MODULE_TYPE${NC}"
+
 # Determine default based on GPU and Secure Boot
 if [ "$SECURE_BOOT_ENABLED" = true ] || [ "$RECOMMEND_OPEN" = true ]; then
     DEFAULT_CHOICE="2"
-    echo -e "${CYAN}Detected: $GPU_NAME${NC}"
     if [ "$RECOMMEND_OPEN" = true ]; then
         echo -e "${GREEN}Recommendation: Open kernel module (better for your GPU)${NC}"
     else
@@ -195,7 +208,6 @@ if [ "$SECURE_BOOT_ENABLED" = true ] || [ "$RECOMMEND_OPEN" = true ]; then
     fi
 else
     DEFAULT_CHOICE="1"
-    echo -e "${CYAN}Detected: $GPU_NAME${NC}"
 fi
 
 echo ""
@@ -204,7 +216,7 @@ KERNEL_CHOICE=${KERNEL_CHOICE:-${DEFAULT_CHOICE}}
 
 case "$KERNEL_CHOICE" in
     1)
-        KERNEL_MODULE="nvidia-kernel-dkms"
+        NEW_KERNEL_MODULE="nvidia-kernel-dkms"
         if [ "$SECURE_BOOT_ENABLED" = true ]; then
             echo ""
             echo -e "${YELLOW}⚠ WARNING: Secure Boot is enabled${NC}"
@@ -215,14 +227,13 @@ case "$KERNEL_CHOICE" in
             read -r -p "Continue anyway? [y/N]: " CONTINUE
             CONTINUE=${CONTINUE:-N}
             if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-                echo "Installation cancelled."
+                echo "Cancelled."
                 exit 0
             fi
         fi
         ;;
     2)
-        KERNEL_MODULE="nvidia-kernel-open-dkms"
-        echo -e "${GREEN}Using open kernel module${NC}"
+        NEW_KERNEL_MODULE="nvidia-kernel-open-dkms"
         ;;
     *)
         echo -e "${RED}Invalid choice${NC}"
@@ -230,42 +241,58 @@ case "$KERNEL_CHOICE" in
         ;;
 esac
 
+# Confirm upgrade
 echo ""
-echo -e "${CYAN}>>> Installing NVIDIA driver ${DRIVER_VERSION} (branch ${DRIVER_BRANCH})${NC}"
-echo -e "${DIM}Kernel module: ${KERNEL_MODULE}${NC}"
+echo -e "${YELLOW}This will upgrade your NVIDIA driver:${NC}"
+echo "  From: Driver ${CURRENT_DRIVER} ($CURRENT_KERNEL_MODULE)"
+echo "  To:   Driver ${NEW_VERSION} ($NEW_KERNEL_MODULE)"
+echo ""
+read -r -p "Continue? [y/N]: " CONFIRM
+CONFIRM=${CONFIRM:-N}
+
+if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+echo ""
+echo -e "${CYAN}>>> Upgrading NVIDIA driver to version ${NEW_VERSION}${NC}"
+echo -e "${DIM}Kernel module: ${NEW_KERNEL_MODULE}${NC}"
 echo ""
 
-# Install full driver stack
-# Note: nvidia-driver-cuda provides nvidia-smi and CUDA integration for all versions
+# Remove old driver and kernel module packages
+echo ">>> Removing old driver packages..."
+apt-get remove -y nvidia-driver nvidia-kernel-dkms nvidia-kernel-open-dkms 2>&1 | grep -v "Policy will reject signature" || true
+
+# Install new driver
+echo ">>> Installing NVIDIA driver ${NEW_VERSION}..."
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    nvidia-driver=${DRIVER_VERSION} \
-    ${KERNEL_MODULE}=${DRIVER_VERSION} \
-    nvidia-driver-cuda=${DRIVER_VERSION}
+    nvidia-driver=${NEW_VERSION} \
+    ${NEW_KERNEL_MODULE}=${NEW_VERSION} \
+    nvidia-driver-cuda=${NEW_VERSION}
 
-# Handle MOK enrollment for open kernel module with Secure Boot
-if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" = true ]; then
+# Handle MOK enrollment if switching to open kernel module with Secure Boot
+if [ "$NEW_KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && \
+   [ "$CURRENT_KERNEL_MODULE" != "nvidia-kernel-open-dkms" ] && \
+   [ "$SECURE_BOOT_ENABLED" = true ]; then
     echo ""
     echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${YELLOW}║            Secure Boot Detected - Action Required           ║${NC}"
     echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${CYAN}The NVIDIA open kernel module requires authorization to load.${NC}"
+    echo -e "${CYAN}Switching to open kernel module requires authorization.${NC}"
     echo ""
     echo -e "${YELLOW}You have TWO options:${NC}"
     echo ""
-    echo -e "${GREEN}Option 1: MOK Enrollment (Recommended)${NC}"
+    echo -e "${GREEN}Option 1: MOK Enrollment${NC}"
     echo "  • Keeps Secure Boot enabled (more secure)"
     echo "  • One-time setup during next boot"
     echo "  • You'll enter a password in MOK Manager before Proxmox boots"
-    echo "  • Best for production environments"
     echo ""
     echo -e "${GREEN}Option 2: Disable Secure Boot${NC}"
     echo "  • Simpler - no enrollment needed"
     echo "  • Disable Secure Boot in your BIOS/UEFI settings"
     echo "  • Modules will load automatically after reboot"
-    echo "  • Fine for most Proxmox hosts"
-    echo ""
-    echo -e "${DIM}Note: Most Proxmox users disable Secure Boot for simplicity.${NC}"
     echo ""
     
     read -r -p "Continue with MOK enrollment? [y/N]: " CONTINUE_MOK
@@ -275,14 +302,14 @@ if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" 
         echo ""
         echo -e "${YELLOW}Skipping MOK enrollment.${NC}"
         echo ""
-        echo -e "${CYAN}To complete installation:${NC}"
+        echo -e "${CYAN}To complete upgrade:${NC}"
         echo "  1. Reboot into BIOS/UEFI settings"
         echo "  2. Find 'Secure Boot' setting (usually in Security or Boot menu)"
         echo "  3. Set to: ${GREEN}Disabled${NC}"
         echo "  4. Save and reboot"
         echo "  5. NVIDIA driver will load automatically"
         echo ""
-        echo -e "${GREEN}>>> NVIDIA driver installation completed${NC}"
+        echo -e "${GREEN}>>> NVIDIA driver upgrade completed${NC}"
         echo -e "${YELLOW}⚠  Disable Secure Boot in BIOS, then reboot${NC}"
         echo ""
         exit 3
@@ -299,7 +326,7 @@ if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" 
     read -r -p "Enter MOK enrollment password [nvidia]: " MOK_PASSWORD
     MOK_PASSWORD=${MOK_PASSWORD:-nvidia}
     
-    # Validate password length (MOK requires 1-256 characters, but we recommend at least 4)
+    # Validate password length
     while [ ${#MOK_PASSWORD} -lt 4 ] || [ ${#MOK_PASSWORD} -gt 256 ]; do
         echo -e "${RED}Password must be 4-256 characters${NC}"
         read -r -p "Enter MOK enrollment password [nvidia]: " MOK_PASSWORD
@@ -334,8 +361,11 @@ if [ "$KERNEL_MODULE" = "nvidia-kernel-open-dkms" ] && [ "$SECURE_BOOT_ENABLED" 
 fi
 
 echo ""
-echo -e "${GREEN}>>> NVIDIA driver installation completed${NC}"
-echo -e "${YELLOW}⚠  Reboot required to load kernel module${NC}"
+echo -e "${GREEN}>>> NVIDIA driver upgrade completed${NC}"
+echo -e "${YELLOW}⚠  Reboot required to load new driver version${NC}"
+echo ""
+echo -e "${CYAN}After reboot, verify with: nvidia-smi${NC}"
 echo ""
 
 exit 3  # Exit code 3 = success but reboot required
+

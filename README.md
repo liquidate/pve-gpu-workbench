@@ -59,16 +59,28 @@ Press **TAB** for command completion.
 
 ### GPU Setup (Host)
 
+**AMD GPUs:**
 - **`strix-igpu`** - Configure iGPU VRAM allocation (1-96GB, Strix Halo only)
 - **`amd-drivers`** - Install AMD ROCm drivers (versions 6.0-7.1)
 - **`amd-upgrade`** - Upgrade to a different ROCm version
 - **`amd-verify`** - Verify GPU setup (20+ checks, detects reboot requirements)
+
+**NVIDIA GPUs:**
+- **`nvidia-drivers`** - Install NVIDIA CUDA drivers and kernel modules
+- **`nvidia-verify`** - Verify GPU setup (comprehensive checks, detects reboot requirements)
+
+**Universal:**
 - **`gpu-udev`** - Configure udev rules for GPU device permissions
 - **`power`** - Toggle power management (powertop + AutoASPM)
 
 ### LXC Containers
 
-- **`ollama-amd`** - Create GPU-enabled Ollama LXC
+- **`ollama-amd`** - Create GPU-enabled Ollama LXC (AMD GPU)
+  - Quick Mode: Uses defaults, minimal prompts
+  - Advanced Mode: Full customization
+  - Includes automatic GPU verification
+  
+- **`ollama-nvidia`** - Create GPU-enabled Ollama LXC (NVIDIA GPU)
   - Quick Mode: Uses defaults, minimal prompts
   - Advanced Mode: Full customization
   - Includes automatic GPU verification
@@ -116,51 +128,82 @@ radeontop
 - AMD Radeon Pro WX series
 - AMD Strix Halo APU (with configurable iGPU VRAM)
 
-### ROCm Versions
+**ROCm Versions:**
 - Dynamically fetched from AMD's repository
 - Currently supports ROCm 6.0 - 7.1
+
+### NVIDIA GPUs
+- GeForce RTX series (20xx, 30xx, 40xx, 50xx)
+- GeForce GTX series
+- Tesla/Quadro series
+- Any CUDA-capable NVIDIA GPU
+
+**CUDA/Driver Versions:**
+- Latest drivers from NVIDIA CUDA repository
+- Supports CUDA 12.x
 
 ## Requirements
 
 - Proxmox VE 8.x
-- AMD GPU or APU
+- AMD GPU/APU or NVIDIA GPU
 - Root access
 - Internet connection
 
 ## What Gets Installed
 
-### Host
+### Host (AMD)
 - AMD ROCm drivers and libraries
 - GPU monitoring tools (rocm-smi, radeontop, nvtop)
 - GPU udev rules for container passthrough
 - Kernel parameters for iGPU VRAM (Strix Halo)
 
-### LXC Containers
+### Host (NVIDIA)
+- NVIDIA CUDA drivers and kernel modules
+- GPU monitoring tools (nvidia-smi, nvtop)
+- GPU udev rules for container passthrough
+
+### LXC Containers (AMD)
 - Ubuntu 24.04 LTS base
 - Ollama (latest version)
 - ROCm utilities (rocm-smi, rocminfo, radeontop)
 - GPU passthrough configuration
 - Pre-configured for network access (0.0.0.0:11434)
 
+### LXC Containers (NVIDIA)
+- Ubuntu 24.04 LTS base
+- Ollama (latest version)
+- NVIDIA utilities (nvidia-smi, CUDA toolkit)
+- GPU passthrough configuration
+- Pre-configured for network access (0.0.0.0:11434)
+
 ## Typical Workflow
 
-### First Time Setup
+### First Time Setup (AMD)
 1. Run bootstrap command
 2. Type: `setup` (or press Enter)
 3. Follow prompts, reboot when asked
 4. After reboot: `pve-gpu` → `amd-verify`
 5. Create LXC: `pve-gpu` → `ollama-amd`
 
+### First Time Setup (NVIDIA)
+1. Run bootstrap command
+2. Type: `setup` (or press Enter)
+3. Follow prompts, reboot when asked
+4. After reboot: `pve-gpu` → `nvidia-verify`
+5. Create LXC: `pve-gpu` → `ollama-nvidia`
+
 ### Creating Additional LXCs
 ```bash
 pve-gpu
-ollama-amd  # Quick mode by default
+ollama-amd    # For AMD GPUs (Quick mode by default)
+ollama-nvidia # For NVIDIA GPUs (Quick mode by default)
 ```
 
-### Upgrading ROCm
+### Upgrading Drivers
 ```bash
 pve-gpu
-amd-upgrade  # Shows current and available versions
+amd-upgrade     # AMD: Shows current and available ROCm versions
+nvidia-drivers  # NVIDIA: Update to latest drivers
 ```
 
 ### Changing iGPU VRAM
@@ -174,10 +217,11 @@ strix-igpu  # Interactive, shows current allocation
 ### GPU Not Detected
 ```bash
 pve-gpu
-amd-verify  # Provides detailed diagnostics
+amd-verify     # AMD: Provides detailed diagnostics
+nvidia-verify  # NVIDIA: Provides detailed diagnostics
 ```
 
-### GPU Not Working in LXC
+### GPU Not Working in LXC (AMD)
 ```bash
 # From host
 pct exec <container-id> -- ls -la /dev/dri/ /dev/kfd
@@ -185,6 +229,17 @@ pct exec <container-id> -- ls -la /dev/dri/ /dev/kfd
 # From inside container
 ssh root@<container-ip>
 gpu-verify
+```
+
+### GPU Not Working in LXC (NVIDIA)
+```bash
+# From host
+pct exec <container-id> -- ls -la /dev/nvidia*
+
+# From inside container
+ssh root@<container-ip>
+gpu-verify
+nvidia-smi
 ```
 
 ### Reboot Required

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SCRIPT_DESC: Comprehensive AMD GPU setup verification
+# SCRIPT_DESC: Verify AMD GPU setup and drivers
 # SCRIPT_DETECT: false
 
 # Comprehensive AMD GPU Verification

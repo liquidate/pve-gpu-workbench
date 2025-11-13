@@ -411,9 +411,11 @@ fi
 
 complete_progress "System packages updated ($PACKAGE_COUNT packages)"
 
-# Install prerequisites
-show_progress 5 $TOTAL_STEPS "Installing prerequisites"
+# Install prerequisites (ffmpeg and python3-pip can take a while)
+echo "Installing prerequisites..." >> "$LOG_FILE"
+start_spinner "${CYAN}[Step 5/$TOTAL_STEPS]${NC} Installing prerequisites (ffmpeg, python3-pip, ~1-2 minutes)..."
 pct exec $CONTAINER_ID -- apt install -y curl wget gnupg2 ffmpeg python3-pip >> "$LOG_FILE" 2>&1
+stop_spinner
 complete_progress "Prerequisites installed"
 
 # Install uv and Open WebUI

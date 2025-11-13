@@ -845,9 +845,7 @@ GPU_VERIFY_SUMMARY="$GPU_STATUS ($GPU_CHECKS_PASSED)"
 sleep 3
 
 # Set container notes with access info
-start_progress "Setting container notes"
-{
-    pct set $CONTAINER_ID --description "Ollama - Local AI Model Server (AMD GPU)
+pct set $CONTAINER_ID --description "Ollama - Local AI Model Server (AMD GPU)
 
 🚀 API: http://$IP_ADDRESS:11434
 🎮 GPU: $GPU_VERIFY_DETAILS
@@ -869,9 +867,7 @@ start_progress "Setting container notes"
   radeontop
 
 🔑 Root password: $ROOT_PASSWORD
-"
-} >> "$LOG_FILE" 2>&1
-complete_progress "Container notes updated"
+" >> "$LOG_FILE" 2>&1
 
 # Clear screen and show completion message
 clear

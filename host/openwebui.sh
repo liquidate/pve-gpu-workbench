@@ -446,9 +446,7 @@ SERVICEEOF'
 complete_progress "Open WebUI configured and running"
 
 # Set container notes with access info
-start_progress "Setting container notes"
-{
-    pct set $CONTAINER_ID --description "Open WebUI - AI Chat Interface
+pct set $CONTAINER_ID --description "Open WebUI - AI Chat Interface
 
 🌐 Web UI: http://$IP_ADDRESS:8080
 📡 Connected to: http://${OLLAMA_IP}:11434
@@ -464,9 +462,7 @@ start_progress "Setting container notes"
   journalctl -u open-webui -f
 
 🔑 Root password: $ROOT_PASSWORD
-"
-} >> "$LOG_FILE" 2>&1
-complete_progress "Container notes updated"
+" >> "$LOG_FILE" 2>&1
 
 # Clear screen and show completion message
 clear

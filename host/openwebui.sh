@@ -238,8 +238,8 @@ else
     HOSTNAME="${BASE_HOSTNAME}"
 fi
 
-# Calculate resources (Open WebUI is lightweight)
-DISK_SIZE=10  # 10GB should be plenty
+# Calculate resources (Open WebUI is lightweight without extras)
+DISK_SIZE=10  # 10GB should be plenty without CUDA dependencies
 MEMORY=4      # 4GB RAM
 SWAP=2        # 2GB swap
 CORES=2       # 2 CPU cores
@@ -429,14 +429,15 @@ complete_progress "Prerequisites installed"
 
 # Install uv and Open WebUI
 echo "Installing uv (Python package installer)..." >> "$LOG_FILE"
-start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - about 500MB download, 3-5 minutes..."
+start_spinner "${CYAN}[Step 6/$TOTAL_STEPS]${NC} Installing Open WebUI - lightweight, no CUDA deps, 1-2 minutes..."
 
 pct exec $CONTAINER_ID -- bash -c "
     # Install uv
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
-    # Install Open WebUI using uv
-    /root/.local/bin/uv tool install --python 3.12 open-webui[all]
+    # Install Open WebUI without extras (no CUDA/torch dependencies)
+    # All AI processing happens in the Ollama container, not here
+    /root/.local/bin/uv tool install --python 3.12 open-webui
 " >> "$LOG_FILE" 2>&1
 
 stop_spinner

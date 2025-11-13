@@ -156,6 +156,49 @@ check_status_amd-upgrade() {
     fi
 }
 
+check_status_ollama-amd() {
+    # Check if Ollama AMD container exists
+    if pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -q "^ollama-amd"; then
+        local count=$(pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -c "^ollama-amd")
+        if [ "$count" -eq 1 ]; then
+            echo "INSTALLED"
+        else
+            echo "${count} CONTAINERS"
+        fi
+    else
+        echo "ACTION"
+    fi
+}
+
+check_status_ollama-nvidia() {
+    # Check if Ollama NVIDIA container exists
+    if pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -q "^ollama-nvidia"; then
+        local count=$(pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -c "^ollama-nvidia")
+        if [ "$count" -eq 1 ]; then
+            echo "INSTALLED"
+        else
+            echo "${count} CONTAINERS"
+        fi
+    else
+        echo "ACTION"
+    fi
+}
+
+check_status_openwebui() {
+    # Check if Open WebUI container exists
+    if pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -q "^openwebui"; then
+        # Found at least one openwebui container
+        local count=$(pct list 2>/dev/null | tail -n +2 | awk '{print $3}' | grep -c "^openwebui")
+        if [ "$count" -eq 1 ]; then
+            echo "INSTALLED"
+        else
+            echo "${count} CONTAINERS"
+        fi
+    else
+        echo "ACTION"
+    fi
+}
+
 check_status_nvidia-upgrade() {
     # Check if NVIDIA driver is installed - try nvidia-smi first, then dpkg
     if command -v nvidia-smi &>/dev/null; then
@@ -375,12 +418,15 @@ get_lxc_scripts() {
     
     for command in "${SCRIPT_COMMANDS[@]}"; do
         # Only LXC scripts
-        if [[ "$command" == ollama-* ]] || [[ "$command" == comfyui-* ]]; then
+        if [[ "$command" == ollama-* ]] || [[ "$command" == comfyui-* ]] || [[ "$command" == openwebui ]]; then
             if [ "$gpu_type" = "amd" ] && [[ "$command" == *-amd ]]; then
                 echo "$command"
             elif [ "$gpu_type" = "nvidia" ] && [[ "$command" == *-nvidia ]]; then
                 echo "$command"
             elif [ "$gpu_type" = "all" ]; then
+                echo "$command"
+            # openwebui works with either AMD or NVIDIA (it connects to Ollama)
+            elif [[ "$command" == openwebui ]]; then
                 echo "$command"
             fi
         fi

@@ -266,9 +266,6 @@ if [ -z "$STORAGE" ]; then
     exit 1
 fi
 
-# Generate root password
-ROOT_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
-
 # ═══════════════════════════════════════════════════════════════
 # STEP 2: Show configuration and confirm
 # ═══════════════════════════════════════════════════════════════
@@ -286,7 +283,6 @@ echo -e "  ${CYAN}Disk Size:${NC}       ${GREEN}${DISK_SIZE}GB${NC}"
 echo -e "  ${CYAN}Memory:${NC}          ${GREEN}${MEMORY}GB${NC}"
 echo -e "  ${CYAN}Swap:${NC}            ${GREEN}${SWAP}GB${NC}"
 echo -e "  ${CYAN}CPU Cores:${NC}       ${GREEN}$CORES${NC}"
-echo -e "  ${CYAN}Root Password:${NC}   ${GREEN}$ROOT_PASSWORD${NC}"
 echo ""
 echo -e "  ${CYAN}Ollama Instance:${NC} ${GREEN}${OLLAMA_NAME}${NC} ${DIM}(http://${OLLAMA_IP}:11434)${NC}"
 echo ""
@@ -303,7 +299,33 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 3: Download template if needed
+# STEP 3: Get root password
+# ═══════════════════════════════════════════════════════════════
+
+echo -e "${CYAN}Set root password for SSH access:${NC}"
+echo -n "Enter password: "
+read -s ROOT_PASSWORD
+echo ""
+echo -n "Confirm password: "
+read -s ROOT_PASSWORD_CONFIRM
+echo ""
+
+if [ "$ROOT_PASSWORD" != "$ROOT_PASSWORD_CONFIRM" ]; then
+    echo -e "${RED}ERROR: Passwords do not match${NC}"
+    exit 1
+fi
+
+if [ -z "$ROOT_PASSWORD" ]; then
+    echo -e "${RED}ERROR: Password cannot be empty${NC}"
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}✓ Password set${NC}"
+echo ""
+
+# ═══════════════════════════════════════════════════════════════
+# STEP 4: Download template if needed
 # ═══════════════════════════════════════════════════════════════
 
 TEMPLATE_NAME="ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
@@ -322,7 +344,7 @@ if [ ! -f "$TEMPLATE_PATH" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 4: Create and configure LXC
+# STEP 5: Create and configure LXC
 # ═══════════════════════════════════════════════════════════════
 
 TOTAL_STEPS=7

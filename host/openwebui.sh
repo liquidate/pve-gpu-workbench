@@ -217,8 +217,17 @@ while pct status $NEXT_ID &>/dev/null; do
 done
 CONTAINER_ID=$NEXT_ID
 
-# Determine hostname
-BASE_HOSTNAME="openwebui"
+# Determine hostname based on connected Ollama instance
+# Extract GPU type from Ollama name (e.g., "ollama-nvidia" -> "openwebui-nvidia")
+if [[ "$OLLAMA_NAME" =~ ollama-(.*) ]]; then
+    GPU_SUFFIX="${BASH_REMATCH[1]}"
+    BASE_HOSTNAME="openwebui-${GPU_SUFFIX}"
+else
+    # Fallback if name doesn't match expected pattern
+    BASE_HOSTNAME="openwebui"
+fi
+
+# Check if this hostname already exists, if so add numeric suffix
 if pct list 2>/dev/null | grep -q "[[:space:]]${BASE_HOSTNAME}[[:space:]]"; then
     SUFFIX=2
     while pct list 2>/dev/null | grep -q "[[:space:]]${BASE_HOSTNAME}-${SUFFIX}[[:space:]]"; do

@@ -1,6 +1,8 @@
-# Proxmox GPU Management Platform
+# PVE GPU Workbench
 
 A guided installation system for GPU passthrough in Proxmox VE, with automated container deployment and a plugin-based architecture.
+
+**Build GPU-accelerated workloads on Proxmox with ease.**
 
 ## What This Does
 
@@ -15,10 +17,10 @@ A guided installation system for GPU passthrough in Proxmox VE, with automated c
 On your Proxmox VE host:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/proxmox-setup-scripts/feature/gpu-detection-improvements/bootstrap.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/liquidate/pve-gpu-workbench/main/bootstrap.sh)"
 ```
 
-This installs the `pve-gpu` command. Run it to launch the interactive menu.
+This installs the `pve-gpu` command. Run it to launch the interactive workbench.
 
 ## Usage
 
@@ -256,10 +258,10 @@ Contributions welcome! Please:
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/liquidate/proxmox-setup-scripts/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/liquidate/proxmox-setup-scripts/discussions)
+- **Issues**: [GitHub Issues](https://github.com/liquidate/pve-gpu-workbench/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/liquidate/pve-gpu-workbench/discussions)
 - **Documentation**: [`docs/`](docs/) directory
 
 ---
 
-**Note**: This project maintains active development. For the original simpler script collection, see [jammsen's repository](https://github.com/jammsen/proxmox-setup-scripts).
+**Note**: This project maintains active development. For the original simpler script collection that inspired this workbench, see [jammsen's proxmox-setup-scripts](https://github.com/jammsen/proxmox-setup-scripts).
